@@ -1,0 +1,69 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function hasExactFields() {
+      let fields = [
+        'content',
+        'createdAt',
+        'updatedAt',
+        'deletedAt'
+      ];
+      return request.resource.data.keys().hasAll(fields)
+        && request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasValidTypesAndContent() {
+      return request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 10000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && (
+          request.resource.data.deletedAt == null
+          || request.resource.data.deletedAt is timestamp
+        );
+    }
+
+    match /users/{userId}/logs/{logId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && hasExactFields()
+        && hasValidTypesAndContent()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.deletedAt == null;
+
+      allow update: if isOwner(userId)
+        && hasExactFields()
+        && hasValidTypesAndContent()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && resource.data.deletedAt == null
+        && (
+          (
+            request.resource.data.deletedAt == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'content',
+              'updatedAt'
+            ])
+          )
+          || (
+            request.resource.data.deletedAt == request.time
+            && request.resource.data.content == resource.data.content
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'updatedAt',
+              'deletedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
+    }
+  }
+}
