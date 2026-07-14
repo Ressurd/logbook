@@ -306,6 +306,39 @@ button:disabled {
   font-size: 11px;
 }
 
+.composer-guidance {
+  min-width: 0;
+}
+
+.mobile-enter-mode {
+  display: none;
+}
+
+.enter-mode-options {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page);
+}
+
+.enter-mode-option {
+  min-height: 25px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.enter-mode-option.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .form-message,
 .form-error {
   color: var(--danger);
@@ -975,6 +1008,22 @@ button:disabled {
 
   .modal-panel {
     border-radius: 15px;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .desktop-composer-help {
+    display: none;
+  }
+
+  .mobile-enter-mode {
+    display: flex;
+    min-height: 31px;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
   }
 }
 

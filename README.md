@@ -6,7 +6,7 @@
 
 - Google 로그인과 선택적 단일 이메일 허용 목록
 - 날짜별 실시간 기록 작성, 수정, 소프트 삭제
-- PC `Enter` 저장, `Shift + Enter` 줄바꿈, 모바일 기록 버튼
+- PC `Enter` 저장, `Shift + Enter` 줄바꿈, 모바일 `Enter` 동작 선택
 - 이전/다음/오늘/직접 선택 날짜 이동과 `?date=YYYY-MM-DD` 유지
 - Firestore IndexedDB 오프라인 캐시와 멀티탭 동기화
 - 별도 IndexedDB 검색 캐시를 이용한 한글 부분 문자열 검색

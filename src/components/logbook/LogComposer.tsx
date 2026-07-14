@@ -15,6 +15,11 @@ import {
   formatCharacterCount,
   getErrorMessage,
 } from "@/features/logbook/utils/format";
+import {
+  MOBILE_ENTER_MODE_STORAGE_KEY,
+  parseMobileEnterMode,
+  type MobileEnterMode,
+} from "@/features/logbook/utils/mobileEnterMode";
 import { waitForWriteOrQueue } from "@/features/logbook/utils/writeQueue";
 
 export function LogComposer({
@@ -27,6 +32,8 @@ export function LogComposer({
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [mobileEnterMode, setMobileEnterMode] =
+    useState<MobileEnterMode>("newline");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submittingRef = useRef(false);
 
@@ -36,6 +43,20 @@ export function LogComposer({
     }
     const frame = requestAnimationFrame(() => textareaRef.current?.focus());
     return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    let savedMode: string | null = null;
+    try {
+      savedMode = window.localStorage.getItem(MOBILE_ENTER_MODE_STORAGE_KEY);
+    } catch {
+      // 브라우저 저장소가 차단된 환경에서는 안전한 기본값을 유지합니다.
+    }
+    const timer = window.setTimeout(
+      () => setMobileEnterMode(parseMobileEnterMode(savedMode)),
+      0,
+    );
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -96,11 +117,26 @@ export function LogComposer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    const desktopKeyboard = window.matchMedia("(pointer: fine)").matches;
-    if (event.key === "Enter" && !event.shiftKey && desktopKeyboard) {
-      event.preventDefault();
-      void submit();
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+
+    const desktopKeyboard = window.matchMedia(
+      "(min-width: 768px) and (pointer: fine)",
+    ).matches;
+    if (!desktopKeyboard && mobileEnterMode === "newline") return;
+
+    event.preventDefault();
+    void submit();
+  };
+
+  const changeMobileEnterMode = (mode: MobileEnterMode) => {
+    setMobileEnterMode(mode);
+    try {
+      window.localStorage.setItem(MOBILE_ENTER_MODE_STORAGE_KEY, mode);
+    } catch {
+      // 저장이 불가능해도 현재 화면에서는 선택한 동작을 유지합니다.
     }
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   return (
@@ -114,19 +150,54 @@ export function LogComposer({
         value={content}
         maxLength={10_000}
         rows={2}
+        enterKeyHint={mobileEnterMode === "submit" ? "send" : "enter"}
         placeholder="생각나는 내용을 입력하세요"
         onChange={(event) => {
           setContent(event.target.value);
           if (message) setMessage(null);
         }}
         onKeyDown={onKeyDown}
-        aria-describedby="composer-help composer-message"
+        aria-describedby="composer-help mobile-enter-mode-help composer-message"
       />
       <div className="composer-footer">
-        <div>
-          <p id="composer-help" className="composer-help">
+        <div className="composer-guidance">
+          <p id="composer-help" className="composer-help desktop-composer-help">
             PC: Enter 저장 · Shift + Enter 줄바꿈
           </p>
+          <div
+            id="mobile-enter-mode-help"
+            className="mobile-enter-mode"
+            role="group"
+            aria-label="모바일 Enter 키 동작"
+          >
+            <span>Enter</span>
+            <div className="enter-mode-options">
+              <button
+                type="button"
+                className={
+                  mobileEnterMode === "submit"
+                    ? "enter-mode-option active"
+                    : "enter-mode-option"
+                }
+                aria-pressed={mobileEnterMode === "submit"}
+                onClick={() => changeMobileEnterMode("submit")}
+              >
+                기록
+              </button>
+              <button
+                type="button"
+                className={
+                  mobileEnterMode === "newline"
+                    ? "enter-mode-option active"
+                    : "enter-mode-option"
+                }
+                aria-pressed={mobileEnterMode === "newline"}
+                onClick={() => changeMobileEnterMode("newline")}
+              >
+                줄바꿈
+              </button>
+            </div>
+          </div>
           <p id="composer-message" className="form-message" aria-live="polite">
             {message}
           </p>
