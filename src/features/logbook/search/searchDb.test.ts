@@ -6,6 +6,7 @@ import type { CachedLogEntry } from "../model/logEntry.types";
 import { normalizeSearchText } from "../model/logEntry.mapper";
 import {
   clearSearchCache,
+  getFrequentCachedKeywords,
   putCachedLogEntries,
   searchCachedLogs,
 } from "./searchDb";
@@ -80,5 +81,23 @@ describe("IndexedDB 검색 캐시", () => {
     const secondResult = await searchCachedLogs(secondUid, "공유 검색어");
     expect(firstResult.entries.map((item) => item.id)).toEqual(["first"]);
     expect(secondResult.entries.map((item) => item.id)).toEqual(["second"]);
+  });
+
+  it("현재 UID의 삭제되지 않은 기록만 자주 쓴 단어에 반영한다", async () => {
+    const uid = "frequent-words-owner";
+    const otherUid = "frequent-words-other";
+    await clearSearchCache(uid);
+    await clearSearchCache(otherUid);
+    await putCachedLogEntries([
+      cached(uid, "1", "블로그 아이디어", 1),
+      cached(uid, "2", "블로그 초안", 2),
+      cached(uid, "3", "비밀 비밀", 3, 4),
+      cached(otherUid, "4", "비밀 비밀", 4),
+      cached(otherUid, "5", "비밀 메모", 5),
+    ]);
+
+    expect(await getFrequentCachedKeywords(uid)).toEqual([
+      { word: "블로그", count: 2 },
+    ]);
   });
 });

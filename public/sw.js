@@ -1,4 +1,4 @@
-const CACHE_NAME = "logbook-static-v2";
+const CACHE_NAME = "logbook-static-v3";
 const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/pwa-icon/192",
@@ -54,7 +54,7 @@ self.addEventListener("fetch", (event) => {
       fetch(event.request).catch(
         () =>
           new Response(
-            "<!doctype html><html lang='ko'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>Logbook</title><body><main><h1>Logbook</h1><p>오프라인입니다. 연결 후 다시 시도해주세요.</p></main></body></html>",
+            "<!doctype html><html lang='ko'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta name='theme-color' content='#0e1110'><title>Logbook</title><body style='margin:0;padding:32px;background:#0e1110;color:#f1f5f2;font:16px/1.6 system-ui,sans-serif'><main><h1>Logbook</h1><p style='color:#a6b0aa'>오프라인입니다. 연결 후 다시 시도해주세요.</p></main></body></html>",
             { headers: { "Content-Type": "text/html; charset=utf-8" } },
           ),
       ),

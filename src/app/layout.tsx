@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: "생각과 작업을 입력 시각과 함께 빠르게 남기는 개인용 로그북",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Logbook",
   },
   formatDetection: { telephone: false },
@@ -28,10 +28,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f5f0" },
-    { media: "(prefers-color-scheme: dark)", color: "#151513" },
-  ],
+  themeColor: "#0e1110",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

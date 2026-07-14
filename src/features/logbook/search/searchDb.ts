@@ -5,6 +5,10 @@ import type {
   FirestorePageCursor,
 } from "../model/logEntry.types";
 import { normalizeSearchText } from "../model/logEntry.mapper";
+import {
+  rankFrequentKeywords,
+  type FrequentKeyword,
+} from "./frequentKeywords";
 
 export type SearchSyncMeta = {
   uid: string;
@@ -85,6 +89,20 @@ export type SearchResultPage = {
   total: number;
   hasMore: boolean;
 };
+
+export async function getFrequentCachedKeywords(
+  uid: string,
+  limit = 10,
+): Promise<FrequentKeyword[]> {
+  const database = await getDatabase();
+  const entries = await database.getAllFromIndex("logs", "by-uid", uid);
+  return rankFrequentKeywords(
+    entries
+      .filter((entry) => entry.deletedAt === null)
+      .map((entry) => entry.content),
+    { limit },
+  );
+}
 
 export async function searchCachedLogs(
   uid: string,

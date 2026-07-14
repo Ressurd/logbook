@@ -5,12 +5,14 @@ import type { LogEntry } from "@/features/logbook/model/logEntry.types";
 
 export function LogEntryList({
   entries,
+  recentlyCreatedIds,
   loading,
   error,
   onUpdate,
   onDelete,
 }: {
   entries: LogEntry[];
+  recentlyCreatedIds: ReadonlySet<string>;
   loading: boolean;
   error: string | null;
   onUpdate: (entry: LogEntry, content: string) => Promise<void>;
@@ -49,6 +51,7 @@ export function LogEntryList({
         <LogEntryItem
           key={entry.id}
           entry={entry}
+          justCreated={recentlyCreatedIds.has(entry.id)}
           onUpdate={onUpdate}
           onDelete={onDelete}
         />

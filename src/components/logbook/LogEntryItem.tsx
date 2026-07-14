@@ -11,10 +11,12 @@ import { getErrorMessage } from "@/features/logbook/utils/format";
 
 export function LogEntryItem({
   entry,
+  justCreated,
   onUpdate,
   onDelete,
 }: {
   entry: LogEntry;
+  justCreated: boolean;
   onUpdate: (entry: LogEntry, content: string) => Promise<void>;
   onDelete: (entry: LogEntry) => Promise<void>;
 }) {
@@ -50,7 +52,7 @@ export function LogEntryItem({
   };
 
   return (
-    <article className="log-entry">
+    <article className={justCreated ? "log-entry just-created" : "log-entry"}>
       <div className="entry-time">
         <time dateTime={entry.createdAt.toISOString()}>
           {formatKstTime(entry.createdAt)}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DateNavigator } from "./DateNavigator";
 import { LogComposer } from "./LogComposer";
@@ -23,6 +23,33 @@ export function HomeScreen({ selectedDate }: { selectedDate: string }) {
     selectedDate,
   );
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [recentlyCreatedIds, setRecentlyCreatedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const animationTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  useEffect(
+    () => () => {
+      for (const timer of animationTimers.current.values()) clearTimeout(timer);
+      animationTimers.current.clear();
+    },
+    [],
+  );
+
+  const markEntryAsCreated = useCallback((id: string) => {
+    setRecentlyCreatedIds((current) => new Set(current).add(id));
+    const previousTimer = animationTimers.current.get(id);
+    if (previousTimer) clearTimeout(previousTimer);
+    const timer = setTimeout(() => {
+      setRecentlyCreatedIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      animationTimers.current.delete(id);
+    }, 3_500);
+    animationTimers.current.set(id, timer);
+  }, []);
 
   const changeDate = (date: string) => {
     router.replace(`/?date=${encodeURIComponent(date)}`);
@@ -106,7 +133,7 @@ export function HomeScreen({ selectedDate }: { selectedDate: string }) {
   return (
     <AppShell>
       <DateNavigator date={selectedDate} onChange={changeDate} />
-      <LogComposer uid={user!.uid} />
+      <LogComposer uid={user!.uid} onEntryCreated={markEntryAsCreated} />
       {mutationError ? (
         <p className="state-message error compact" aria-live="polite">
           {mutationError}
@@ -122,6 +149,7 @@ export function HomeScreen({ selectedDate }: { selectedDate: string }) {
       </div>
       <LogEntryList
         entries={entries}
+        recentlyCreatedIds={recentlyCreatedIds}
         loading={loading}
         error={error}
         onUpdate={update}

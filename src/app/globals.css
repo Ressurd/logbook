@@ -1,45 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --page: #f7f5f0;
-  --surface: #fffefa;
-  --surface-strong: #ffffff;
-  --text: #20211f;
-  --muted: #72736e;
-  --faint: #9a9b95;
-  --line: #ddddd6;
-  --line-soft: #e9e8e1;
-  --accent: #20372d;
-  --accent-hover: #2c4a3d;
-  --accent-soft: #e3ebe6;
-  --danger: #a0473f;
-  --danger-soft: #f4e6e3;
-  --success: #2f6c50;
-  --focus: #5d8f76;
-  --shadow: 0 18px 50px rgb(28 35 30 / 0.08);
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #151513;
-    --surface: #1d1e1b;
-    --surface-strong: #242521;
-    --text: #f0efe9;
-    --muted: #a9aaa3;
-    --faint: #7f8179;
-    --line: #393a35;
-    --line-soft: #2d2e2a;
-    --accent: #b9d4c3;
-    --accent-hover: #d0e3d6;
-    --accent-soft: #26352d;
-    --danger: #e39a91;
-    --danger-soft: #3e2927;
-    --success: #9bd0b0;
-    --focus: #8fc4a6;
-    --shadow: 0 18px 50px rgb(0 0 0 / 0.25);
-    color-scheme: dark;
-  }
+  --page: #0e1110;
+  --surface: #151916;
+  --surface-strong: #1a201c;
+  --text: #f1f5f2;
+  --muted: #a6b0aa;
+  --faint: #747f78;
+  --line: #364039;
+  --line-soft: #28312b;
+  --accent: #a8d7ba;
+  --accent-hover: #c1e7cf;
+  --accent-soft: #203329;
+  --danger: #f0a39b;
+  --danger-soft: #3a2423;
+  --success: #9ed6b4;
+  --focus: #82c59e;
+  --shadow: 0 18px 50px rgb(0 0 0 / 0.34);
+  color-scheme: dark;
 }
 
 * {
@@ -62,6 +40,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--text);
+}
+
 button,
 input,
 textarea {
@@ -77,6 +60,14 @@ textarea {
 
 button {
   color: inherit;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px var(--surface-strong) inset;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
 }
 
 button:focus-visible,
@@ -401,6 +392,13 @@ button:disabled {
   border-top: 0;
 }
 
+.log-entry.just-created {
+  border-radius: 10px;
+  animation:
+    entry-arrive 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    entry-highlight 1.7s ease-out;
+}
+
 .entry-time {
   display: flex;
   flex-direction: column;
@@ -628,6 +626,58 @@ button:disabled {
   background: transparent;
   color: var(--text);
   font-size: 16px;
+}
+
+.frequent-keywords {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px 13px;
+  padding-top: 14px;
+}
+
+.frequent-keywords h2 {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.keyword-chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.keyword-chip small {
+  color: var(--faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.keyword-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .search-status {
@@ -898,6 +948,26 @@ button:disabled {
   to { background-position: -200% 0; }
 }
 
+@keyframes entry-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes entry-highlight {
+  0%, 28% {
+    background: color-mix(in srgb, var(--accent-soft) 82%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 @media (min-width: 680px) {
   .modal-backdrop {
     align-items: center;
@@ -1000,6 +1070,15 @@ button:disabled {
 
   .composer-actions {
     justify-content: flex-end;
+  }
+
+  .frequent-keywords {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .frequent-keywords h2 {
+    margin-top: 0;
   }
 }
 

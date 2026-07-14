@@ -17,7 +17,13 @@ import {
 } from "@/features/logbook/utils/format";
 import { waitForWriteOrQueue } from "@/features/logbook/utils/writeQueue";
 
-export function LogComposer({ uid }: { uid: string }) {
+export function LogComposer({
+  uid,
+  onEntryCreated,
+}: {
+  uid: string;
+  onEntryCreated?: (id: string) => void;
+}) {
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,8 +61,10 @@ export function LogComposer({ uid }: { uid: string }) {
     setSubmitting(true);
     setMessage(null);
     try {
+      const write = createLogEntry(uid, parsed.data);
+      onEntryCreated?.(write.id);
       const outcome = await waitForWriteOrQueue(
-        createLogEntry(uid, parsed.data),
+        write.completion,
         navigator.onLine ? undefined : 0,
       );
       setContent((current) => (current === submittedContent ? "" : current));

@@ -7,7 +7,9 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { syncSearchCache } from "@/features/logbook/api/syncSearchCache";
 import type { CachedLogEntry } from "@/features/logbook/model/logEntry.types";
+import type { FrequentKeyword } from "@/features/logbook/search/frequentKeywords";
 import {
+  getFrequentCachedKeywords,
   isSearchCacheReady,
   searchCachedLogs,
 } from "@/features/logbook/search/searchDb";
@@ -32,6 +34,15 @@ export function SearchScreen() {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncRevision, setSyncRevision] = useState(0);
+  const [frequentKeywords, setFrequentKeywords] = useState<FrequentKeyword[]>([]);
+
+  const refreshFrequentKeywords = useCallback(async (uid: string) => {
+    try {
+      setFrequentKeywords(await getFrequentCachedKeywords(uid));
+    } catch {
+      setFrequentKeywords([]);
+    }
+  }, []);
 
   const synchronize = useCallback(async () => {
     const uid = user!.uid;
@@ -41,6 +52,7 @@ export function SearchScreen() {
     try {
       hadReadyCache = await isSearchCacheReady(uid);
       setCacheReady(hadReadyCache);
+      if (hadReadyCache) await refreshFrequentKeywords(uid);
       const result = await syncSearchCache(uid, (progress) => {
         const mode = progress.mode === "full" ? "전체" : "변경분";
         setSyncMessage(
@@ -53,6 +65,7 @@ export function SearchScreen() {
           : `변경된 기록 ${result.processed.toLocaleString("ko-KR")}개 확인 완료`,
       );
       setCacheReady(true);
+      await refreshFrequentKeywords(uid);
       setSyncRevision((revision) => revision + 1);
     } catch (syncError) {
       setError(
@@ -62,10 +75,11 @@ export function SearchScreen() {
         ),
       );
       setCacheReady(hadReadyCache);
+      if (hadReadyCache) await refreshFrequentKeywords(uid);
     } finally {
       setSyncing(false);
     }
-  }, [user]);
+  }, [refreshFrequentKeywords, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void synchronize(), 0);
@@ -137,6 +151,25 @@ export function SearchScreen() {
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
+      {cacheReady && frequentKeywords.length > 0 ? (
+        <section className="frequent-keywords" aria-labelledby="frequent-keywords-title">
+          <h2 id="frequent-keywords-title">자주 쓴 단어</h2>
+          <div className="keyword-list">
+            {frequentKeywords.map(({ word, count }) => (
+              <button
+                key={word}
+                type="button"
+                className="keyword-chip"
+                aria-label={`${word}, ${count}개 기록에서 사용, 검색하기`}
+                onClick={() => setQuery(word)}
+              >
+                <span>{word}</span>
+                <small>{count}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="search-status" aria-live="polite">
         <span>{syncMessage}</span>
         {searching ? <span>검색 중</span> : null}
