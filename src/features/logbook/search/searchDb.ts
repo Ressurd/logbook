@@ -11,7 +11,9 @@ import {
 } from "./frequentKeywords";
 
 export type SearchSyncMeta = {
+  key: string;
   uid: string;
+  sourceType: CachedLogEntry["sourceType"];
   phase: "full" | "ready";
   cursor: FirestorePageCursor | null;
 };
@@ -32,15 +34,16 @@ let databasePromise: Promise<IDBPDatabase<LogbookSearchDb>> | null = null;
 
 function getDatabase() {
   if (!databasePromise) {
-    databasePromise = openDB<LogbookSearchDb>("logbook-search", 2, {
+    databasePromise = openDB<LogbookSearchDb>("logbook-search", 3, {
       upgrade(database, oldVersion, _newVersion, transaction) {
         if (oldVersion < 1) {
           const logs = database.createObjectStore("logs", { keyPath: "key" });
           logs.createIndex("by-uid", "uid");
-          database.createObjectStore("syncMeta", { keyPath: "uid" });
         }
-        if (oldVersion === 1) {
-          transaction.objectStore("syncMeta").clear();
+        if (oldVersion < 3) {
+          transaction.objectStore("logs").clear();
+          if (database.objectStoreNames.contains("syncMeta")) database.deleteObjectStore("syncMeta");
+          database.createObjectStore("syncMeta", { keyPath: "key" });
         }
       },
     });
@@ -62,8 +65,9 @@ export async function putCachedLogEntries(
 
 export async function getSearchSyncMeta(
   uid: string,
+  sourceType: CachedLogEntry["sourceType"],
 ): Promise<SearchSyncMeta | undefined> {
-  return (await getDatabase()).get("syncMeta", uid);
+  return (await getDatabase()).get("syncMeta", `${uid}:${sourceType}`);
 }
 
 export async function setSearchSyncMeta(meta: SearchSyncMeta): Promise<void> {
@@ -71,7 +75,11 @@ export async function setSearchSyncMeta(meta: SearchSyncMeta): Promise<void> {
 }
 
 export async function isSearchCacheReady(uid: string): Promise<boolean> {
-  return (await getSearchSyncMeta(uid))?.phase === "ready";
+  const [logs, events] = await Promise.all([
+    getSearchSyncMeta(uid, "manual_log"),
+    getSearchSyncMeta(uid, "stack_event"),
+  ]);
+  return Boolean(logs?.phase === "ready" && events?.phase === "ready");
 }
 
 export async function clearSearchCache(uid: string): Promise<void> {
@@ -80,7 +88,10 @@ export async function clearSearchCache(uid: string): Promise<void> {
   const logsStore = transaction.objectStore("logs");
   const keys = await logsStore.index("by-uid").getAllKeys(uid);
   await Promise.all(keys.map((key) => logsStore.delete(key)));
-  await transaction.objectStore("syncMeta").delete(uid);
+  await Promise.all([
+    transaction.objectStore("syncMeta").delete(`${uid}:manual_log`),
+    transaction.objectStore("syncMeta").delete(`${uid}:stack_event`),
+  ]);
   await transaction.done;
 }
 
@@ -98,7 +109,7 @@ export async function getFrequentCachedKeywords(
   const entries = await database.getAllFromIndex("logs", "by-uid", uid);
   return rankFrequentKeywords(
     entries
-      .filter((entry) => entry.deletedAt === null)
+      .filter((entry) => entry.deletedAt === null && entry.sourceType === "manual_log")
       .map((entry) => entry.content),
     { limit },
   );
@@ -122,7 +133,7 @@ export async function searchCachedLogs(
     )
     .sort(
       (left, right) =>
-        right.createdAt - left.createdAt || right.id.localeCompare(left.id),
+        right.occurredAt - left.occurredAt || right.id.localeCompare(left.id),
     );
 
   return {

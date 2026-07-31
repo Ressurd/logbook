@@ -24,6 +24,8 @@ export type CachedLogEntry = {
   id: string;
   content: string;
   normalizedContent: string;
+  sourceType: "manual_log" | "stack_event";
+  occurredAt: number;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;

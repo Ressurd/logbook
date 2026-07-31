@@ -1,11 +1,12 @@
 "use client";
 
-import { BookOpenText, Search, Settings } from "lucide-react";
+import { BookOpenText, Layers3, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/", label: "오늘", icon: BookOpenText },
+  { href: "/stacks", label: "스택", icon: Layers3 },
   { href: "/search", label: "검색", icon: Search },
   { href: "/settings", label: "설정", icon: Settings },
 ] as const;

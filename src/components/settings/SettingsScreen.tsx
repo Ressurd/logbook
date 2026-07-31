@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   LogOut,
   ShieldCheck,
+  Layers3,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -16,12 +17,16 @@ import { clearSearchCache } from "@/features/logbook/search/searchDb";
 import {
   createCsvBackup,
   createJsonBackup,
+  downloadNamedTextFile,
   downloadTextFile,
 } from "@/features/logbook/utils/export";
 import { getErrorMessage } from "@/features/logbook/utils/format";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchAllStackData } from "@/features/stacks/api/fetchStacks";
+import { createStackJsonBackup } from "@/features/stacks/utils/export";
+import { getTodayKstDateString } from "@/features/logbook/utils/date";
 
-type Action = "json" | "csv" | "cache" | "logout" | null;
+type Action = "json" | "csv" | "stacks" | "cache" | "logout" | null;
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
@@ -52,6 +57,15 @@ export function SettingsScreen() {
       downloadTextFile(createCsvBackup(entries), "csv");
     }
     return `${entries.length.toLocaleString("ko-KR")}개 기록을 ${format.toUpperCase()}로 저장했습니다.`;
+  };
+
+  const exportStackBackup = async () => {
+    const data = await fetchAllStackData(user!.uid);
+    downloadNamedTextFile(
+      createStackJsonBackup(data),
+      `logbook-stacks-backup-${getTodayKstDateString()}.json`,
+    );
+    return `스택 ${data.trackers.length.toLocaleString("ko-KR")}개와 이벤트 ${data.events.length.toLocaleString("ko-KR")}개를 저장했습니다.`;
   };
 
   return (
@@ -114,6 +128,17 @@ export function SettingsScreen() {
         >
           <FileSpreadsheet size={19} />
           <span>{action === "csv" ? "CSV 백업 준비 중" : "CSV 백업"}</span>
+          <Download size={16} />
+        </button>
+        <button
+          type="button"
+          className="settings-action"
+          disabled={Boolean(action)}
+          aria-busy={action === "stacks"}
+          onClick={() => void runAction("stacks", exportStackBackup)}
+        >
+          <Layers3 size={19} />
+          <span>{action === "stacks" ? "스택 백업 준비 중" : "스택 JSON 백업"}</span>
           <Download size={16} />
         </button>
       </section>

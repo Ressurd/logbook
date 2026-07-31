@@ -74,12 +74,23 @@ export function downloadTextFile(
   content: string,
   extension: "json" | "csv",
 ): void {
-  const type = extension === "json" ? "application/json" : "text/csv";
+  downloadNamedTextFile(
+    content,
+    `logbook-backup-${getTodayKstDateString()}.${extension}`,
+    extension === "json" ? "application/json" : "text/csv",
+  );
+}
+
+export function downloadNamedTextFile(
+  content: string,
+  filename: string,
+  type = "application/json",
+): void {
   const blob = new Blob([content], { type: `${type};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `logbook-backup-${getTodayKstDateString()}.${extension}`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
 }

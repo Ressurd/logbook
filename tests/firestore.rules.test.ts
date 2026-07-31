@@ -40,6 +40,40 @@ function logRef(uid: string, id = "log-1") {
   return doc(environment.authenticatedContext(uid).firestore(), "users", uid, "logs", id);
 }
 
+function trackerRef(uid: string, id = "tracker-1") {
+  return doc(environment.authenticatedContext(uid).firestore(), "users", uid, "stackTrackers", id);
+}
+
+function eventRef(uid: string, id = "event-1") {
+  return doc(environment.authenticatedContext(uid).firestore(), "users", uid, "stackEvents", id);
+}
+
+function validTrackerData() {
+  return {
+    name: "휴식",
+    scheduleMode: "custom_time",
+    startMinute: 240,
+    endMinute: 1440,
+    totalCharges: 140,
+    isActive: true,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function validChargeEventData() {
+  return {
+    trackerId: "tracker-1",
+    trackerName: "휴식",
+    eventType: "charge",
+    periodDate: "2026-07-13",
+    chargeIndex: 1,
+    amount: 1,
+    occurredAt: Timestamp.fromDate(new Date("2026-07-12T19:08:34.000Z")),
+    createdAt: serverTimestamp(),
+  };
+}
+
 async function seedLog(uid: string, id = "log-1") {
   const createdAt = Timestamp.fromDate(new Date("2026-07-13T05:23:17.000Z"));
   await environment.withSecurityRulesDisabled(async (context) => {
@@ -221,5 +255,48 @@ describe("Firestore Security Rules", () => {
         updatedAt: serverTimestamp(),
       }),
     );
+  });
+
+  it("본인 스택 트래커만 정확한 필드와 서버 시각으로 생성한다", async () => {
+    await assertSucceeds(setDoc(trackerRef("owner"), validTrackerData()));
+    await assertSucceeds(getDoc(trackerRef("owner")));
+    await assertFails(setDoc(trackerRef("owner", "extra"), { ...validTrackerData(), unexpected: true }));
+    await assertFails(setDoc(trackerRef("owner", "inactive"), { ...validTrackerData(), isActive: false }));
+    await assertFails(setDoc(trackerRef("owner", "bad-time"), { ...validTrackerData(), startMinute: 600, endMinute: 500 }));
+    await assertFails(setDoc(trackerRef("owner", "bad-count"), { ...validTrackerData(), totalCharges: 201 }));
+  });
+
+  it("스택 트래커 수정은 createdAt 보존과 허용 필드만 요구하고 실제 삭제를 막는다", async () => {
+    await assertSucceeds(setDoc(trackerRef("owner"), validTrackerData()));
+    await assertSucceeds(updateDoc(trackerRef("owner"), { name: "집중", isActive: false, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(trackerRef("owner"), { createdAt: Timestamp.fromMillis(1), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(trackerRef("owner"), { name: deleteField(), updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(trackerRef("owner")));
+  });
+
+  it("충전과 사용 이벤트의 조합을 검증하고 생성 뒤 변경과 삭제를 막는다", async () => {
+    await assertSucceeds(setDoc(eventRef("owner", "charge"), validChargeEventData()));
+    await assertSucceeds(setDoc(eventRef("owner", "consume"), {
+      ...validChargeEventData(),
+      eventType: "consume",
+      chargeIndex: null,
+      amount: -1,
+    }));
+    await assertFails(setDoc(eventRef("owner", "bad-charge"), { ...validChargeEventData(), chargeIndex: null }));
+    await assertFails(setDoc(eventRef("owner", "bad-type"), { ...validChargeEventData(), eventType: "bonus" }));
+    await assertFails(setDoc(eventRef("owner", "bad-date"), { ...validChargeEventData(), periodDate: "2026/07/13" }));
+    await assertFails(setDoc(eventRef("owner", "extra"), { ...validChargeEventData(), content: "침입" }));
+    await assertFails(updateDoc(eventRef("owner", "charge"), { trackerName: "변경" }));
+    await assertFails(deleteDoc(eventRef("owner", "charge")));
+  });
+
+  it("다른 UID와 비인증 사용자의 스택 데이터 접근을 차단한다", async () => {
+    await assertSucceeds(setDoc(trackerRef("owner"), validTrackerData()));
+    await assertSucceeds(setDoc(eventRef("owner"), validChargeEventData()));
+    const otherDb = environment.authenticatedContext("other").firestore();
+    const anonDb = environment.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(otherDb, "users", "owner", "stackTrackers", "tracker-1")));
+    await assertFails(getDoc(doc(otherDb, "users", "owner", "stackEvents", "event-1")));
+    await assertFails(getDoc(doc(anonDb, "users", "owner", "stackEvents", "event-1")));
   });
 });

@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  calculateChargeSchedule,
+  calculateChargedCount,
+  calculateCurrentStack,
+  formatChargeInterval,
+  formatRemainingDuration,
+  getKstPeriodDate,
+  getKstPeriodRange,
+  getNextChargeAt,
+  timeToMinute,
+} from "./stackCalculations";
+
+const allDay = { startMinute: 0, endMinute: 1440, totalCharges: 24 };
+
+describe("스택 시간 계산", () => {
+  it("20시간/10회는 2시간, 10시간/6회는 1시간 40분 간격이다", () => {
+    expect(formatChargeInterval({ startMinute: 240, endMinute: 1440, totalCharges: 10 })).toBe("2시간");
+    expect(formatChargeInterval({ startMinute: 600, endMinute: 1200, totalCharges: 6 })).toBe("1시간 40분");
+  });
+
+  it("KST 하루 전체를 같은 간격으로 나누고 마지막 충전을 정확히 자정에 둔다", () => {
+    const schedule = calculateChargeSchedule(allDay, "2026-07-13");
+    expect(schedule).toHaveLength(24);
+    expect(schedule[0].toISOString()).toBe("2026-07-12T16:00:00.000Z");
+    expect(schedule.at(-1)?.toISOString()).toBe("2026-07-13T15:00:00.000Z");
+  });
+
+  it("04:00~24:00 140회를 계산하고 소수 간격에서도 마지막 시각을 고정한다", () => {
+    const tracker = { startMinute: 240, endMinute: 1440, totalCharges: 140 };
+    const schedule = calculateChargeSchedule(tracker, "2026-07-13");
+    expect(schedule).toHaveLength(140);
+    expect(schedule.at(-1)?.toISOString()).toBe("2026-07-13T15:00:00.000Z");
+    expect(formatChargeInterval(tracker)).toBe("8분 34초");
+  });
+
+  it("첫 충전 직전/정각과 종료 경계를 포함해 충전 수를 계산한다", () => {
+    expect(calculateChargedCount(allDay, "2026-07-13", new Date("2026-07-12T15:00:00.000Z"))).toBe(0);
+    expect(calculateChargedCount(allDay, "2026-07-13", new Date("2026-07-12T15:59:59.999Z"))).toBe(0);
+    expect(calculateChargedCount(allDay, "2026-07-13", new Date("2026-07-12T16:00:00.000Z"))).toBe(1);
+    expect(calculateChargedCount(allDay, "2026-07-13", new Date("2026-07-13T15:00:00.000Z"))).toBe(24);
+    expect(calculateChargedCount(allDay, "2026-07-13", new Date("2026-07-14T00:00:00.000Z"))).toBe(24);
+  });
+
+  it("사용 횟수가 충전보다 많으면 음수 스택을 허용한다", () => {
+    expect(calculateCurrentStack(allDay, "2026-07-13", 3, new Date("2026-07-12T16:00:00.000Z"))).toBe(-2);
+  });
+
+  it("다음 충전과 남은 시간을 반환하고 완료 뒤에는 null을 반환한다", () => {
+    const now = new Date("2026-07-12T15:30:00.000Z");
+    const next = getNextChargeAt(allDay, "2026-07-13", now);
+    expect(next?.toISOString()).toBe("2026-07-12T16:00:00.000Z");
+    expect(formatRemainingDuration(next, now)).toBe("30분");
+    expect(getNextChargeAt(allDay, "2026-07-13", new Date("2026-07-13T15:00:00.000Z"))).toBeNull();
+  });
+
+  it("KST 자정에 periodDate를 바꾸고 월말·연말·윤년 범위를 처리한다", () => {
+    expect(getKstPeriodDate(new Date("2026-07-31T14:59:59.999Z"))).toBe("2026-07-31");
+    expect(getKstPeriodDate(new Date("2026-07-31T15:00:00.000Z"))).toBe("2026-08-01");
+    expect(getKstPeriodRange("2024-02-29").end.toISOString()).toBe("2024-02-29T15:00:00.000Z");
+    expect(getKstPeriodRange("2026-12-31").end.toISOString()).toBe("2026-12-31T15:00:00.000Z");
+  });
+
+  it("24:00은 종료에만 허용하고 잘못된 시각을 거부한다", () => {
+    expect(timeToMinute("24:00", true)).toBe(1440);
+    expect(timeToMinute("24:00")).toBeNull();
+    expect(timeToMinute("23:59")).toBe(1439);
+    expect(timeToMinute("12:60")).toBeNull();
+    expect(() => getKstPeriodRange("2026-07-13", 600, 500)).toThrow("올바르지 않습니다");
+    expect(() => calculateChargeSchedule({ startMinute: 0, endMinute: 1440, totalCharges: 201 }, "2026-07-13")).toThrow("1~200");
+  });
+});

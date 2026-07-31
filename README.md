@@ -247,3 +247,65 @@ Preview 배포마다 도메인이 달라질 수 있습니다. 고정된 producti
 - 클라이언트 이메일 허용 목록은 보조 장치입니다. 보안 경계는 UID 기반 Firestore Rules입니다.
 - 로컬 부분 문자열 검색은 브라우저별 캐시를 사용하므로 새 기기 첫 검색 때 전체 동기화가 필요합니다.
 - 휴지통/복원, 백업 복원, 태그, 첨부, 공유, 협업, 푸시 알림은 포함하지 않습니다.
+
+## 스택 트래커
+
+`/stacks`는 하루 동안 일정한 간격으로 충전되는 횟수를 기록하는 기능입니다. 예를 들어 04:00~24:00에 140회를 설정하면 약 8분 34초마다 1회가 충전됩니다. 하루 경계와 모든 스케줄 계산은 `Asia/Seoul` 기준입니다.
+
+현재 수량은 Firestore에 별도의 카운터로 저장하지 않고 다음 식으로 언제든 다시 계산합니다.
+
+```text
+durationMs = periodEnd - periodStart
+chargeAt(index) = periodStart + durationMs * index / totalCharges
+현재 스택 = 현재 시각까지의 충전 횟수 - 오늘 사용 이벤트 수
+```
+
+충전 인덱스는 1부터 시작하며 마지막 충전은 종료 시각과 정확히 일치합니다. 사용은 현재 수량이 0이어도 가능하므로 음수 스택이 표시될 수 있습니다. KST 자정이 지나면 새 `periodDate`로 계산되어 자동으로 초기화됩니다.
+
+### Firestore 데이터 구조
+
+```text
+users/{uid}/stackTrackers/{trackerId}
+users/{uid}/stackEvents/{eventId}
+```
+
+트래커 문서에는 이름, `all_day | custom_time`, 시작/종료 분, 하루 충전 횟수(1~200), 활성 상태, 생성/수정 서버 시각을 저장합니다. 이벤트 문서에는 트래커 ID와 당시 이름, `charge | consume`, KST 날짜, 충전 인덱스, `1 | -1`, 실제 발생 시각과 생성 서버 시각을 저장합니다.
+
+### 충전 보정과 오프라인 동작
+
+Cloud Functions, Cloud Scheduler, cron, 서버 타이머는 사용하지 않습니다. 로그인 후 앱 진입, 활성 트래커 변경, `/stacks` 진입, 탭이 다시 보임, 온라인 복귀, 다음 충전 시각에 클라이언트가 오늘 누락된 충전 이벤트를 보정합니다.
+
+충전 이벤트 ID는 다음과 같이 결정적입니다.
+
+```text
+{trackerId}_charge_{YYYY-MM-DD}_{chargeIndex}
+```
+
+현재 날짜의 기존 ID를 먼저 조회한 뒤 누락분만 Firestore transaction으로 생성합니다. 여러 탭이나 기기에서 동시에 실행되어도 같은 ID가 하나만 남고, 실행 중 새 보정 요청은 합쳐서 한 번 더 반영합니다. 장기간 앱을 닫아둔 경우 과거 여러 날을 뒤늦게 생성하지 않고 현재 KST 날짜만 보정합니다.
+
+사용 버튼은 클릭마다 미리 만든 고유 문서 ID를 한 번만 쓰며 Firestore 오프라인 쓰기 큐를 사용합니다. 자동 충전 이벤트 기록이 네트워크 문제로 늦어져도 현재 스택 자체는 시간 계산으로 표시할 수 있습니다. 브라우저가 완전히 종료된 동안 정확한 시각에 백그라운드 코드를 실행하는 기능은 없으며, 다음 진입 때 누락분을 복구합니다.
+
+### 검색, 타임라인, 백업
+
+- 오늘 및 날짜별 화면은 수동 로그와 스택 이벤트를 `occurredAt` 기준으로 합쳐 표시합니다. 수동 로그만 수정·삭제할 수 있습니다.
+- 검색 IndexedDB는 `manual_log`와 `stack_event` 소스를 UID namespace 안에 분리해 저장합니다. 두 소스 모두 시간/문서 ID 복합 커서로 증분 동기화하며, 자주 쓴 단어는 자동 이벤트 문구를 제외한 수동 로그에서만 계산합니다.
+- 설정의 **스택 JSON 백업**을 누를 때만 트래커와 모든 이벤트를 각각 200개 단위로 끝까지 조회합니다. 파일명은 `logbook-stacks-backup-YYYY-MM-DD.json`입니다. 어느 페이지라도 실패하면 불완전한 파일을 다운로드하지 않습니다.
+
+### Rules와 인덱스
+
+`firestore.rules`는 각 스택 collection에서 본인 UID 읽기만 허용하고, 정확한 필드 집합·타입·범위·`request.time`을 검사합니다. 트래커의 실제 delete와 이벤트의 update/delete는 차단합니다. 활성 트래커 조회에 필요한 복합 인덱스는 `firestore.indexes.json`에 포함되어 있습니다.
+
+클라이언트만 사용하는 구조이므로 인증된 사용자가 개발자 도구나 수정한 클라이언트로 규칙에 맞는 가짜 `charge` 이벤트를 만들 가능성까지 서버에서 판별할 수는 없습니다. Rules는 다른 UID 접근과 문서 변조 형태를 막지만, 충전 시각이 실제 계산 결과인지 신뢰성 있게 증명하려면 향후 신뢰 가능한 서버가 필요합니다. 현재 개인용·무료 범위에서는 이 제한을 명시적으로 받아들입니다.
+
+배포 전에 다음을 반영해야 합니다. 이 저장소의 구현 과정에서는 자동 배포하지 않습니다.
+
+```bash
+firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes
+```
+
+Rules 테스트는 실제 Firebase 프로젝트가 필요 없는 `demo-logbook` ID를 사용합니다. JDK 21 LTS와 로컬 `firebase-tools`가 준비된 환경에서 `npm run test:rules` 한 명령으로 Emulator를 시작하고 테스트 뒤 종료합니다. Windows에서는 `winget install EclipseAdoptium.Temurin.21.JDK` 후 새 PowerShell에서 `java -version`을 확인하세요.
+
+Vercel 배포 환경에는 기존 `NEXT_PUBLIC_FIREBASE_*` 값만 필요하며 새로운 서버 비밀키, Storage, Functions, Scheduler 설정은 추가하지 않습니다.
+
+트래커의 시간 범위나 총 충전 횟수를 당일 중간에 수정해도 이미 생성된 불변 충전 이벤트의 예정 시각은 다시 쓰지 않습니다. 현재 스택 계산은 새 설정을 즉시 따르므로, 이벤트 이력을 가장 단순하게 유지하려면 큰 스케줄 변경은 다음 KST 날짜가 시작되기 전에 하는 것을 권장합니다.

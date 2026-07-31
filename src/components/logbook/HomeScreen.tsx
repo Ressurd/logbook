@@ -14,6 +14,8 @@ import { getErrorMessage } from "@/features/logbook/utils/format";
 import { waitForWriteOrQueue } from "@/features/logbook/utils/writeQueue";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyLogs } from "@/hooks/useDailyLogs";
+import { useDailyStackEvents } from "@/hooks/useDailyStackEvents";
+import { mergeTimelineEntries } from "@/features/timeline/timeline";
 
 export function HomeScreen({ selectedDate }: { selectedDate: string }) {
   const { user } = useAuth();
@@ -22,6 +24,8 @@ export function HomeScreen({ selectedDate }: { selectedDate: string }) {
     user!.uid,
     selectedDate,
   );
+  const stackState = useDailyStackEvents(user!.uid, selectedDate);
+  const timelineEntries = mergeTimelineEntries(entries, stackState.events);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [recentlyCreatedIds, setRecentlyCreatedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -140,18 +144,18 @@ export function HomeScreen({ selectedDate }: { selectedDate: string }) {
         </p>
       ) : null}
       <div className="list-heading">
-        <h2>기록 {loading ? "" : entries.length.toLocaleString("ko-KR")}</h2>
-        {metadata.hasPendingWrites ? (
+        <h2>기록 {loading || stackState.loading ? "" : timelineEntries.length.toLocaleString("ko-KR")}</h2>
+        {metadata.hasPendingWrites || stackState.metadata.hasPendingWrites ? (
           <span className="sync-note">동기화 대기 중</span>
         ) : metadata.fromCache ? (
           <span className="sync-note">캐시에서 표시 중</span>
         ) : null}
       </div>
       <LogEntryList
-        entries={entries}
+        entries={timelineEntries}
         recentlyCreatedIds={recentlyCreatedIds}
-        loading={loading}
-        error={error}
+        loading={loading || stackState.loading}
+        error={error ?? stackState.error}
         onUpdate={update}
         onDelete={remove}
       />

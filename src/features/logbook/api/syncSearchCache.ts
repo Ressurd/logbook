@@ -10,6 +10,8 @@ import {
   setSearchSyncMeta,
   type SearchSyncMeta,
 } from "../search/searchDb";
+import { fetchStackEventChangePage } from "@/features/stacks/api/fetchStacks";
+import { toCachedStackEvent } from "@/features/stacks/model/stack.mapper";
 
 export type SearchSyncProgress = {
   mode: "full" | "incremental";
@@ -17,7 +19,7 @@ export type SearchSyncProgress = {
 };
 
 export type SearchSyncDependencies = {
-  getMeta: (uid: string) => Promise<SearchSyncMeta | undefined>;
+  getMeta: (uid: string, sourceType: CachedLogEntry["sourceType"]) => Promise<SearchSyncMeta | undefined>;
   setMeta: (meta: SearchSyncMeta) => Promise<void>;
   putEntries: (entries: CachedLogEntry[]) => Promise<void>;
   fetchPage: (
@@ -72,7 +74,8 @@ export async function performSearchSync(
   dependencies: SearchSyncDependencies,
   onProgress?: (progress: SearchSyncProgress) => void,
 ): Promise<SearchSyncProgress> {
-  const meta = await dependencies.getMeta(uid);
+  const sourceType = "manual_log" as const;
+  const meta = await dependencies.getMeta(uid, sourceType);
   const mode: SearchSyncProgress["mode"] =
     meta?.phase === "ready" ? "incremental" : "full";
   let highWaterCursor = meta?.cursor ?? null;
@@ -104,7 +107,7 @@ export async function performSearchSync(
     onProgress?.({ mode, processed });
 
     if (mode === "full" && page.cursor) {
-      await dependencies.setMeta({ uid, phase: "full", cursor });
+      await dependencies.setMeta({ key: `${uid}:${sourceType}`, uid, sourceType, phase: "full", cursor });
     }
 
     if (!page.hasMore) break;
@@ -113,7 +116,40 @@ export async function performSearchSync(
     }
   }
 
-  await dependencies.setMeta({ uid, phase: "ready", cursor: highWaterCursor });
+  await dependencies.setMeta({ key: `${uid}:${sourceType}`, uid, sourceType, phase: "ready", cursor: highWaterCursor });
+  return { mode, processed };
+}
+
+async function performStackEventSearchSync(
+  uid: string,
+  onProgress?: (progress: SearchSyncProgress) => void,
+): Promise<SearchSyncProgress> {
+  const sourceType = "stack_event" as const;
+  const meta = await getSearchSyncMeta(uid, sourceType);
+  const mode: SearchSyncProgress["mode"] = meta?.phase === "ready" ? "incremental" : "full";
+  let highWaterCursor = meta?.cursor ?? null;
+  let cursor = mode === "incremental" && meta?.cursor ? createIncrementalStartCursor(meta.cursor) : meta?.cursor ?? null;
+  let firstPage = true;
+  let processed = 0;
+  while (true) {
+    const previous = cursorKey(cursor);
+    const page = await fetchStackEventChangePage(uid, {
+      cursor,
+      inclusiveTimestamp: mode === "incremental" && firstPage && Boolean(cursor),
+    });
+    firstPage = false;
+    await putCachedLogEntries(page.entries.map((entry) => toCachedStackEvent(uid, entry)));
+    processed += page.entries.length;
+    if (page.cursor) {
+      cursor = page.cursor;
+      if (!highWaterCursor || compareCursors(page.cursor, highWaterCursor) > 0) highWaterCursor = page.cursor;
+    }
+    onProgress?.({ mode, processed });
+    if (mode === "full" && page.cursor) await setSearchSyncMeta({ key: `${uid}:${sourceType}`, uid, sourceType, phase: "full", cursor });
+    if (!page.hasMore) break;
+    if (!page.cursor || cursorKey(cursor) === previous) throw new Error("스택 검색 동기화 페이지 커서가 진행되지 않았습니다.");
+  }
+  await setSearchSyncMeta({ key: `${uid}:${sourceType}`, uid, sourceType, phase: "ready", cursor: highWaterCursor });
   return { mode, processed };
 }
 
@@ -124,9 +160,11 @@ export function syncSearchCache(
   const existing = activeSyncs.get(uid);
   if (existing) return existing;
 
-  const sync = performSearchSync(uid, defaultDependencies, onProgress).finally(
-    () => activeSyncs.delete(uid),
-  );
+  const sync = (async () => {
+    const manual = await performSearchSync(uid, defaultDependencies, onProgress);
+    const stack = await performStackEventSearchSync(uid, (progress) => onProgress?.({ mode: manual.mode === "full" || progress.mode === "full" ? "full" : "incremental", processed: manual.processed + progress.processed }));
+    return { mode: manual.mode === "full" || stack.mode === "full" ? "full" : "incremental", processed: manual.processed + stack.processed } as SearchSyncProgress;
+  })().finally(() => activeSyncs.delete(uid));
   activeSyncs.set(uid, sync);
   return sync;
 }

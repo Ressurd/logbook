@@ -1,7 +1,9 @@
 import { NotebookPen } from "lucide-react";
 
 import { LogEntryItem } from "./LogEntryItem";
+import { StackEventItem } from "./StackEventItem";
 import type { LogEntry } from "@/features/logbook/model/logEntry.types";
+import type { TimelineEntry } from "@/features/timeline/timeline";
 
 export function LogEntryList({
   entries,
@@ -11,7 +13,7 @@ export function LogEntryList({
   onUpdate,
   onDelete,
 }: {
-  entries: LogEntry[];
+  entries: TimelineEntry[];
   recentlyCreatedIds: ReadonlySet<string>;
   loading: boolean;
   error: string | null;
@@ -47,15 +49,19 @@ export function LogEntryList({
 
   return (
     <section className="entry-list" aria-label="시간순 기록 목록">
-      {entries.map((entry) => (
-        <LogEntryItem
-          key={entry.id}
-          entry={entry}
-          justCreated={recentlyCreatedIds.has(entry.id)}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-        />
-      ))}
+      {entries.map((entry) =>
+        entry.sourceType === "manual_log" ? (
+          <LogEntryItem
+            key={entry.key}
+            entry={entry.log}
+            justCreated={recentlyCreatedIds.has(entry.log.id)}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+          />
+        ) : (
+          <StackEventItem key={entry.key} event={entry.event} />
+        ),
+      )}
     </section>
   );
 }

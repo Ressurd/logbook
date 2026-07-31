@@ -195,8 +195,8 @@ export function SearchScreen() {
             <p className="state-message">일치하는 기록이 없습니다.</p>
           ) : (
             entries.map((entry) => {
-              const createdAt = new Date(entry.createdAt);
-              const date = getTodayKstDateString(createdAt);
+              const occurredAt = new Date(entry.occurredAt);
+              const date = getTodayKstDateString(occurredAt);
               return (
                 <Link
                   key={entry.key}
@@ -204,9 +204,9 @@ export function SearchScreen() {
                   className="search-result"
                 >
                   <div className="result-meta">
-                    <span>{formatKstDateShort(createdAt)}</span>
-                    <time dateTime={createdAt.toISOString()}>
-                      {formatKstTime(createdAt)}
+                    <span>{entry.sourceType === "stack_event" ? "스택 · " : ""}{formatKstDateShort(occurredAt)}</span>
+                    <time dateTime={occurredAt.toISOString()}>
+                      {formatKstTime(occurredAt)}
                     </time>
                   </div>
                   <p>{entry.content}</p>

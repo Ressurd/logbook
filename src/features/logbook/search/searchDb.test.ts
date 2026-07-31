@@ -17,13 +17,16 @@ function cached(
   content: string,
   createdAt: number,
   deletedAt: number | null = null,
+  sourceType: CachedLogEntry["sourceType"] = "manual_log",
 ): CachedLogEntry {
   return {
-    key: `${uid}:${id}`,
+    key: `${uid}:${sourceType}:${id}`,
     uid,
     id,
     content,
     normalizedContent: normalizeSearchText(content),
+    sourceType,
+    occurredAt: createdAt,
     createdAt,
     updatedAt: createdAt,
     deletedAt,
@@ -94,10 +97,26 @@ describe("IndexedDB 검색 캐시", () => {
       cached(uid, "3", "비밀 비밀", 3, 4),
       cached(otherUid, "4", "비밀 비밀", 4),
       cached(otherUid, "5", "비밀 메모", 5),
+      cached(uid, "stack", "블로그 스택 +1 충전", 6, null, "stack_event"),
     ]);
 
     expect(await getFrequentCachedKeywords(uid)).toEqual([
       { word: "블로그", count: 2 },
     ]);
+  });
+
+  it("스택 이벤트도 검색하지만 UID namespace는 완전히 분리한다", async () => {
+    const uid = "stack-search-owner";
+    const otherUid = "stack-search-other";
+    await clearSearchCache(uid);
+    await clearSearchCache(otherUid);
+    await putCachedLogEntries([
+      cached(uid, "event", "[휴식] 스택 1회 사용", 20, null, "stack_event"),
+      cached(otherUid, "event", "휴식 스택 +1 충전", 30, null, "stack_event"),
+    ]);
+    const result = await searchCachedLogs(uid, "휴식");
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].sourceType).toBe("stack_event");
+    expect(result.entries[0].content).toContain("1회 사용");
   });
 });

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ServiceWorkerRegistration } from "@/components/layout/ServiceWorkerRegistration";
+import { StackProvider } from "@/components/stacks/StackProvider";
 
 export const metadata: Metadata = {
   applicationName: "Logbook",
@@ -35,7 +36,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="ko">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <StackProvider>{children}</StackProvider>
+        </AuthProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>

@@ -83,7 +83,9 @@ describe("검색 캐시 동기화", () => {
     expect(requested).toEqual([null, firstCursor]);
     expect([...memory.cache.keys()]).toEqual(["a", "b", "c", "d"]);
     expect(memory.getMeta()).toEqual({
+      key: "user:manual_log",
       uid: "user",
+      sourceType: "manual_log",
       phase: "ready",
       cursor: finalCursor,
     });
@@ -113,7 +115,9 @@ describe("검색 캐시 동기화", () => {
       "network",
     );
     expect(memory.getMeta()).toEqual({
+      key: "user:manual_log",
       uid: "user",
+      sourceType: "manual_log",
       phase: "full",
       cursor: firstCursor,
     });
@@ -133,7 +137,7 @@ describe("검색 캐시 동기화", () => {
       inclusiveTimestamp?: boolean;
     }> = [];
     const memory = createMemoryDependencies(
-      { uid: "user", phase: "ready", cursor: initialCursor },
+      { key: "user:manual_log", uid: "user", sourceType: "manual_log", phase: "ready", cursor: initialCursor },
       async (_uid, options): Promise<LogChangePage> => {
         requested.push(options);
         attempts += 1;
