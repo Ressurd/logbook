@@ -17,7 +17,7 @@ import {
 } from "@/features/stacks/api/reconcileCharges";
 import { subscribeActiveStackTrackers, type StackSubscriptionMetadata } from "@/features/stacks/api/subscribeStacks";
 import type { StackTracker } from "@/features/stacks/model/stack.types";
-import { getNextChargeAt, getKstPeriodDate } from "@/features/stacks/utils/stackCalculations";
+import { getNextTrackerChargeAt, getKstPeriodDate } from "@/features/stacks/utils/stackCalculations";
 import { getKstDayRange } from "@/features/logbook/utils/date";
 import { createReconciliationTriggerDebouncer } from "@/features/stacks/utils/reconciliationTrigger";
 import { useAuth } from "@/hooks/useAuth";
@@ -69,13 +69,13 @@ export function StackProvider({ children }: { children: ReactNode }) {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     if (!user || currentTrackers.length === 0) return;
     const now = new Date();
-    const periodDate = getKstPeriodDate(now);
     const nextTimes = currentTrackers
-      .map((tracker) => getNextChargeAt(tracker, periodDate, now)?.getTime())
+      .map((tracker) => getNextTrackerChargeAt(tracker, now)?.getTime())
       .filter((value): value is number => value !== undefined);
-    const nextAt = nextTimes.length > 0
-      ? Math.min(...nextTimes)
-      : getKstDayRange(periodDate).end.getTime();
+    const nextAt = Math.min(
+      ...nextTimes,
+      getKstDayRange(getKstPeriodDate(now)).end.getTime(),
+    );
     timerRef.current = window.setTimeout(() => {
       void reconcile().finally(() => {
         if (mountedRef.current) setTimerRevision((revision) => revision + 1);

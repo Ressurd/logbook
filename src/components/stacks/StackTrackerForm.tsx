@@ -3,22 +3,26 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/common/Modal";
-import type { StackTracker } from "@/features/stacks/model/stack.types";
+import type { StackScheduleMode, StackTracker } from "@/features/stacks/model/stack.types";
 import { stackTrackerInputSchema, type StackTrackerInput } from "@/features/stacks/schemas/stack.schema";
 import {
   calculateChargeSchedule,
   formatChargeInterval,
+  getIntervalChargeAt,
   minuteToTime,
   timeToMinute,
 } from "@/features/stacks/utils/stackCalculations";
-import { formatKstTime, getTodayKstDateString } from "@/features/logbook/utils/date";
+import { formatKstDateShort, formatKstTime, getTodayKstDateString } from "@/features/logbook/utils/date";
 
 type FormState = {
   name: string;
-  scheduleMode: "all_day" | "custom_time";
+  scheduleMode: StackScheduleMode;
   startTime: string;
   endTime: string;
   totalCharges: string;
+  intervalDays: string;
+  anchorDate: string;
+  chargeTime: string;
 };
 
 function initialState(tracker?: StackTracker | null): FormState {
@@ -29,8 +33,20 @@ function initialState(tracker?: StackTracker | null): FormState {
         startTime: minuteToTime(tracker.startMinute),
         endTime: minuteToTime(tracker.endMinute),
         totalCharges: String(tracker.totalCharges),
+        intervalDays: String(tracker.intervalDays ?? 4),
+        anchorDate: tracker.anchorDate ?? getTodayKstDateString(),
+        chargeTime: minuteToTime(tracker.startMinute),
       }
-    : { name: "", scheduleMode: "all_day", startTime: "00:00", endTime: "24:00", totalCharges: "24" };
+    : {
+        name: "",
+        scheduleMode: "all_day",
+        startTime: "00:00",
+        endTime: "24:00",
+        totalCharges: "24",
+        intervalDays: "4",
+        anchorDate: getTodayKstDateString(),
+        chargeTime: "09:00",
+      };
 }
 
 export function StackTrackerForm({
@@ -50,20 +66,37 @@ export function StackTrackerForm({
   const [error, setError] = useState<string | null>(null);
 
   const parsed = useMemo(() => {
+    const intervalMode = form.scheduleMode === "interval_days";
     const allDay = form.scheduleMode === "all_day";
-    const startMinute = allDay ? 0 : timeToMinute(form.startTime);
-    const endMinute = allDay ? 1440 : timeToMinute(form.endTime, true);
+    const startMinute = intervalMode
+      ? timeToMinute(form.chargeTime)
+      : allDay ? 0 : timeToMinute(form.startTime);
+    const endMinute = intervalMode
+      ? startMinute === null ? null : Math.min(startMinute + 1, 1440)
+      : allDay ? 1440 : timeToMinute(form.endTime, true);
     return stackTrackerInputSchema.safeParse({
       name: form.name,
       scheduleMode: form.scheduleMode,
       startMinute,
       endMinute,
-      totalCharges: Number(form.totalCharges),
+      totalCharges: intervalMode ? 1 : Number(form.totalCharges),
+      intervalDays: intervalMode ? Number(form.intervalDays) : null,
+      anchorDate: intervalMode ? form.anchorDate : null,
     });
   }, [form]);
 
   const preview = useMemo(() => {
     if (!parsed.success) return null;
+    if (parsed.data.scheduleMode === "interval_days") {
+      const samples = Array.from({ length: 4 }, (_, offset) =>
+        getIntervalChargeAt(parsed.data, offset + 1),
+      );
+      return {
+        interval: `${parsed.data.intervalDays}일`,
+        times: samples.map((date) => `${formatKstDateShort(date)} ${formatKstTime(date)}`),
+        omitted: true,
+      };
+    }
     const schedule = calculateChargeSchedule(parsed.data, getTodayKstDateString());
     const samples = schedule.length <= 4
       ? schedule
@@ -93,7 +126,7 @@ export function StackTrackerForm({
     <Modal
       open={open}
       title={tracker ? "스택 수정" : "스택 만들기"}
-      description="오늘 일정 안에서 같은 간격으로 스택이 충전됩니다."
+      description="매일 나눠 충전하거나, N일마다 1회씩 계속 누적할 수 있습니다."
       onClose={onClose}
     >
       <form className="stack-form" onSubmit={(event) => void submit(event)}>
@@ -108,13 +141,14 @@ export function StackTrackerForm({
           />
         </label>
         <label>
-          <span>충전 시간</span>
+          <span>충전 방식</span>
           <select
             value={form.scheduleMode}
             onChange={(event) => setForm((current) => ({ ...current, scheduleMode: event.target.value as FormState["scheduleMode"] }))}
           >
             <option value="all_day">하루 전체 (00:00–24:00)</option>
             <option value="custom_time">시간 직접 지정</option>
+            <option value="interval_days">N일마다 1회 누적</option>
           </select>
         </label>
         {form.scheduleMode === "custom_time" ? (
@@ -129,13 +163,35 @@ export function StackTrackerForm({
             </label>
           </div>
         ) : null}
-        <label>
-          <span>하루 충전 횟수</span>
-          <input type="number" min={1} max={200} inputMode="numeric" value={form.totalCharges} onChange={(event) => setForm((current) => ({ ...current, totalCharges: event.target.value }))} />
-        </label>
+        {form.scheduleMode === "interval_days" ? (
+          <>
+            <label>
+              <span>충전 주기</span>
+              <div className="stack-period-input">
+                <input type="number" min={1} max={365} inputMode="numeric" value={form.intervalDays} onChange={(event) => setForm((current) => ({ ...current, intervalDays: event.target.value }))} />
+                <span>일마다 +1</span>
+              </div>
+            </label>
+            <div className="stack-form-times">
+              <label>
+                <span>첫 충전 날짜</span>
+                <input type="date" value={form.anchorDate} onChange={(event) => setForm((current) => ({ ...current, anchorDate: event.target.value }))} />
+              </label>
+              <label>
+                <span>충전 시각</span>
+                <input inputMode="numeric" value={form.chargeTime} placeholder="09:00" onChange={(event) => setForm((current) => ({ ...current, chargeTime: event.target.value }))} />
+              </label>
+            </div>
+          </>
+        ) : (
+          <label>
+            <span>하루 충전 횟수</span>
+            <input type="number" min={1} max={200} inputMode="numeric" value={form.totalCharges} onChange={(event) => setForm((current) => ({ ...current, totalCharges: event.target.value }))} />
+          </label>
+        )}
         {preview ? (
           <div className="stack-preview" aria-live="polite">
-            <strong>약 {preview.interval}마다 +1</strong>
+            <strong>{form.scheduleMode === "interval_days" ? preview.interval : `약 ${preview.interval}`}마다 +1</strong>
             <span>{preview.times.join(" · ")}{preview.omitted ? " · …" : ""}</span>
           </div>
         ) : null}
@@ -148,4 +204,3 @@ export function StackTrackerForm({
     </Modal>
   );
 }
-

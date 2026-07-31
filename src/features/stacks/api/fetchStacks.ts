@@ -85,6 +85,8 @@ export async function fetchStackTrackerPage(uid: string, cursor: FirestorePageCu
         startMinute: entry.startMinute,
         endMinute: entry.endMinute,
         totalCharges: entry.totalCharges,
+        intervalDays: entry.intervalDays,
+        anchorDate: entry.anchorDate,
         isActive: entry.isActive,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,

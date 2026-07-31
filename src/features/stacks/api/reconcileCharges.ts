@@ -1,5 +1,7 @@
 import {
-  getDocs,
+  getDocsFromServer,
+  limit,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -10,8 +12,11 @@ import {
 import type { StackTracker } from "../model/stack.types";
 import {
   calculateChargeSchedule,
+  calculateIntervalChargedCount,
+  getIntervalChargeAt,
   getKstPeriodDate,
 } from "../utils/stackCalculations";
+import { retryFirestoreRead } from "@/features/logbook/api/fetchLogs";
 import { getFirebaseServices } from "@/lib/firebase/client";
 import {
   getUserStackEventDocument,
@@ -35,6 +40,14 @@ export function getChargeEventId(
   return `${trackerId}_charge_${periodDate}_${chargeIndex}`;
 }
 
+export function getIntervalChargeEventId(
+  trackerId: string,
+  periodDate: string,
+  chargeIndex: number,
+): string {
+  return `${trackerId}_interval_charge_${periodDate}_${chargeIndex}`;
+}
+
 export function planMissingChargeEvents(
   trackers: readonly StackTracker[],
   existingEventIds: ReadonlySet<string>,
@@ -43,7 +56,7 @@ export function planMissingChargeEvents(
   const periodDate = getKstPeriodDate(now);
   const nowMs = now.getTime();
   return trackers
-    .filter((tracker) => tracker.isActive)
+    .filter((tracker) => tracker.isActive && tracker.scheduleMode !== "interval_days")
     .flatMap((tracker) =>
       calculateChargeSchedule(tracker, periodDate).flatMap((occurredAt, offset) => {
         const chargeIndex = offset + 1;
@@ -60,6 +73,51 @@ export function planMissingChargeEvents(
           : [];
       }),
     );
+}
+
+export function planMissingIntervalChargeEvents(
+  tracker: StackTracker,
+  lastChargeIndex: number,
+  now = new Date(),
+): PlannedChargeEvent[] {
+  if (!tracker.isActive || tracker.scheduleMode !== "interval_days") return [];
+  const chargedCount = calculateIntervalChargedCount(tracker, now);
+  const missingCount = Math.max(0, chargedCount - lastChargeIndex);
+  if (missingCount > 5_000) {
+    throw new Error("누적 충전 기록이 5,000개를 넘어 첫 충전 날짜를 조정해야 합니다.");
+  }
+  return Array.from({ length: missingCount }, (_, offset) => {
+    const chargeIndex = lastChargeIndex + offset + 1;
+    const occurredAt = getIntervalChargeAt(tracker, chargeIndex);
+    const periodDate = getKstPeriodDate(occurredAt);
+    return {
+      id: getIntervalChargeEventId(tracker.id, periodDate, chargeIndex),
+      trackerId: tracker.id,
+      trackerName: tracker.name,
+      periodDate,
+      chargeIndex,
+      occurredAt,
+    };
+  });
+}
+
+async function fetchLastIntervalChargeIndex(
+  uid: string,
+  tracker: StackTracker,
+): Promise<number> {
+  const snapshot = await retryFirestoreRead(() =>
+    getDocsFromServer(query(
+      getUserStackEventsCollection(uid),
+      where("trackerId", "==", tracker.id),
+      where("eventType", "==", "charge"),
+      orderBy("occurredAt", "desc"),
+      limit(1),
+    )),
+  );
+  const chargeIndex = snapshot.docs[0]?.get("chargeIndex");
+  return typeof chargeIndex === "number" && Number.isInteger(chargeIndex)
+    ? chargeIndex
+    : 0;
 }
 
 type ActiveReconciliation = {
@@ -81,13 +139,27 @@ async function performReconciliation(
 ): Promise<number> {
   if (trackers.length === 0 || isCancelled()) return 0;
   const periodDate = getKstPeriodDate(now);
-  const existing = await getDocs(
-    query(getUserStackEventsCollection(uid), where("periodDate", "==", periodDate)),
-  );
-  const missing = planMissingChargeEvents(
-    trackers,
-    new Set(existing.docs.map((document) => document.id)),
+  const dailyTrackers = trackers.filter((tracker) => tracker.scheduleMode !== "interval_days");
+  const intervalTrackers = trackers.filter((tracker) => tracker.scheduleMode === "interval_days");
+  const existing = dailyTrackers.length > 0
+    ? await retryFirestoreRead(() => getDocsFromServer(
+        query(getUserStackEventsCollection(uid), where("periodDate", "==", periodDate)),
+      ))
+    : null;
+  const dailyMissing = planMissingChargeEvents(
+    dailyTrackers,
+    new Set(existing?.docs.map((document) => document.id) ?? []),
     now,
+  );
+  const intervalMissing = (await Promise.all(intervalTrackers.map(async (tracker) =>
+    planMissingIntervalChargeEvents(
+      tracker,
+      await fetchLastIntervalChargeIndex(uid, tracker),
+      now,
+    ),
+  ))).flat();
+  const missing = [...dailyMissing, ...intervalMissing].sort(
+    (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
   );
   const { db } = getFirebaseServices();
   let created = 0;

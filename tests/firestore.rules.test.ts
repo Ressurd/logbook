@@ -55,6 +55,8 @@ function validTrackerData() {
     startMinute: 240,
     endMinute: 1440,
     totalCharges: 140,
+    intervalDays: null,
+    anchorDate: null,
     isActive: true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -264,6 +266,38 @@ describe("Firestore Security Rules", () => {
     await assertFails(setDoc(trackerRef("owner", "inactive"), { ...validTrackerData(), isActive: false }));
     await assertFails(setDoc(trackerRef("owner", "bad-time"), { ...validTrackerData(), startMinute: 600, endMinute: 500 }));
     await assertFails(setDoc(trackerRef("owner", "bad-count"), { ...validTrackerData(), totalCharges: 201 }));
+  });
+
+  it("N일마다 누적하는 트래커의 주기와 첫 충전 날짜를 검증한다", async () => {
+    const intervalTracker = {
+      ...validTrackerData(),
+      scheduleMode: "interval_days",
+      startMinute: 540,
+      endMinute: 541,
+      totalCharges: 1,
+      intervalDays: 4,
+      anchorDate: "2026-08-01",
+    };
+    await assertSucceeds(setDoc(trackerRef("owner", "interval"), intervalTracker));
+    await assertFails(setDoc(trackerRef("owner", "bad-interval"), { ...intervalTracker, intervalDays: 0 }));
+    await assertFails(setDoc(trackerRef("owner", "bad-anchor"), { ...intervalTracker, anchorDate: "2026/08/01" }));
+    await assertFails(setDoc(trackerRef("owner", "daily-with-interval"), { ...validTrackerData(), intervalDays: 4, anchorDate: "2026-08-01" }));
+  });
+
+  it("기존 8필드 트래커도 비활성화할 수 있다", async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users", "owner", "stackTrackers", "legacy"), {
+        name: "기존 스택",
+        scheduleMode: "all_day",
+        startMinute: 0,
+        endMinute: 1440,
+        totalCharges: 24,
+        isActive: true,
+        createdAt: Timestamp.fromMillis(1),
+        updatedAt: Timestamp.fromMillis(1),
+      });
+    });
+    await assertSucceeds(updateDoc(trackerRef("owner", "legacy"), { isActive: false, updatedAt: serverTimestamp() }));
   });
 
   it("스택 트래커 수정은 createdAt 보존과 허용 필드만 요구하고 실제 삭제를 막는다", async () => {

@@ -23,6 +23,8 @@ export function mapStackTrackerDocument(
     startMinute: data.startMinute,
     endMinute: data.endMinute,
     totalCharges: data.totalCharges,
+    intervalDays: data.intervalDays ?? null,
+    anchorDate: data.anchorDate ?? null,
     isActive: data.isActive,
     createdAt: data.createdAt?.toDate() ?? fallback,
     updatedAt: data.updatedAt?.toDate() ?? data.createdAt?.toDate() ?? fallback,

@@ -90,3 +90,34 @@ export function subscribeDailyStackEvents(
   );
 }
 
+export function subscribeStackTrackerConsumes(
+  uid: string,
+  trackerId: string,
+  onData: (events: StackEvent[], metadata: StackSubscriptionMetadata) => void,
+  onError: (error: Error) => void,
+) {
+  const consumesQuery = query(
+    getUserStackEventsCollection(uid),
+    where("trackerId", "==", trackerId),
+    where("eventType", "==", "consume"),
+  );
+  return onSnapshot(
+    consumesQuery,
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      onData(
+        snapshot.docs.map((document) =>
+          mapStackEventDocument(
+            document as DocumentSnapshot<FirestoreStackEvent>,
+            { serverTimestamps: "estimate" },
+          ),
+        ),
+        {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        },
+      );
+    },
+    onError,
+  );
+}

@@ -6,24 +6,28 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StackTrackerForm } from "./StackTrackerForm";
 import { createConsumeEvent } from "@/features/stacks/api/createConsumeEvent";
-import { createStackTracker, deactivateStackTracker, updateStackTracker } from "@/features/stacks/api/writeStackTracker";
+import { createStackTracker, deactivateStackTracker, replaceStackTracker, updateStackTracker } from "@/features/stacks/api/writeStackTracker";
 import type { StackTracker } from "@/features/stacks/model/stack.types";
 import type { StackTrackerInput } from "@/features/stacks/schemas/stack.schema";
 import {
   calculateChargedCount,
   calculateCurrentStack,
+  calculateIntervalChargedCount,
+  calculateIntervalCurrentStack,
   formatChargeInterval,
   formatRemainingDuration,
+  formatTrackerChargeInterval,
   getKstPeriodDate,
-  getNextChargeAt,
+  getNextTrackerChargeAt,
   minuteToTime,
 } from "@/features/stacks/utils/stackCalculations";
-import { formatKstTime } from "@/features/logbook/utils/date";
+import { formatKstDateShort, formatKstTime } from "@/features/logbook/utils/date";
 import { getErrorMessage } from "@/features/logbook/utils/format";
 import { waitForWriteOrQueue } from "@/features/logbook/utils/writeQueue";
 import { useStacks } from "./StackProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { useDailyStackEvents } from "@/hooks/useDailyStackEvents";
+import { useCumulativeStackConsumes } from "@/hooks/useCumulativeStackConsumes";
 
 export function StackTrackerScreen() {
   const { user } = useAuth();
@@ -31,6 +35,7 @@ export function StackTrackerScreen() {
   const [now, setNow] = useState(() => new Date());
   const periodDate = getKstPeriodDate(now);
   const { events, loading: eventsLoading, error: eventsError } = useDailyStackEvents(user!.uid, periodDate);
+  const cumulativeState = useCumulativeStackConsumes(user!.uid, trackers);
   const [editing, setEditing] = useState<StackTracker | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [busyTrackerId, setBusyTrackerId] = useState<string | null>(null);
@@ -56,7 +61,20 @@ export function StackTrackerScreen() {
     setSaving(true);
     setMessage(null);
     try {
-      if (editing) await updateStackTracker(user!.uid, editing.id, input);
+      const shouldReplace = editing && (
+        editing.scheduleMode !== input.scheduleMode
+        || (
+          editing.scheduleMode === "interval_days"
+          && (
+            editing.intervalDays !== input.intervalDays
+            || editing.anchorDate !== input.anchorDate
+            || editing.startMinute !== input.startMinute
+          )
+        )
+      );
+      if (editing && shouldReplace) {
+        await replaceStackTracker(user!.uid, editing.id, input);
+      } else if (editing) await updateStackTracker(user!.uid, editing.id, input);
       else await createStackTracker(user!.uid, input);
       setEditing(undefined);
     } finally {
@@ -103,33 +121,41 @@ export function StackTrackerScreen() {
   return (
     <AppShell>
       <section className="page-heading">
-        <div><p className="eyebrow">매일 다시 채우는 횟수</p><h1>스택</h1></div>
+        <div><p className="eyebrow">매일 또는 주기마다 채우는 횟수</p><h1>스택</h1></div>
         <button type="button" className="primary-button" onClick={() => setEditing(null)}><Plus size={17} /> 만들기</button>
       </section>
-      {providerError || eventsError ? <p className="state-message error compact">{providerError ?? eventsError}</p> : null}
+      {providerError || eventsError || cumulativeState.error ? <p className="state-message error compact">{providerError ?? eventsError ?? cumulativeState.error}</p> : null}
       {message ? <p className="state-message compact" aria-live="polite">{message}</p> : null}
-      {(loading || eventsLoading) && trackers.length === 0 ? <p className="state-message">스택을 불러오는 중입니다.</p> : null}
+      {(loading || eventsLoading || cumulativeState.loading) && trackers.length === 0 ? <p className="state-message">스택을 불러오는 중입니다.</p> : null}
       {!loading && trackers.length === 0 ? (
-        <div className="empty-state"><Zap size={26} /><p>활성 스택이 없습니다.</p><span>매일 쓸 수 있는 횟수를 일정하게 충전해보세요.</span></div>
+        <div className="empty-state"><Zap size={26} /><p>활성 스택이 없습니다.</p><span>매일 나눠 충전하거나 며칠마다 한 번씩 누적해보세요.</span></div>
       ) : (
         <section className="stack-grid" aria-label="활성 스택 목록">
           {trackers.map((tracker) => {
-            const consumed = consumedByTracker.get(tracker.id) ?? 0;
-            const charged = calculateChargedCount(tracker, periodDate, now);
-            const current = calculateCurrentStack(tracker, periodDate, consumed, now);
-            const next = getNextChargeAt(tracker, periodDate, now);
+            const intervalMode = tracker.scheduleMode === "interval_days";
+            const cumulativeLoading = intervalMode && cumulativeState.loading;
+            const consumed = intervalMode
+              ? cumulativeState.counts[tracker.id] ?? 0
+              : consumedByTracker.get(tracker.id) ?? 0;
+            const charged = intervalMode
+              ? calculateIntervalChargedCount(tracker, now)
+              : calculateChargedCount(tracker, periodDate, now);
+            const current = intervalMode
+              ? calculateIntervalCurrentStack(tracker, consumed, now)
+              : calculateCurrentStack(tracker, periodDate, consumed, now);
+            const next = getNextTrackerChargeAt(tracker, now);
             return (
               <article key={tracker.id} className="stack-card">
                 <header className="stack-card-header">
-                  <div><h2>{tracker.name}</h2><span>{minuteToTime(tracker.startMinute)}–{minuteToTime(tracker.endMinute)} · {formatChargeInterval(tracker)} 간격</span></div>
+                  <div><h2>{tracker.name}</h2><span>{intervalMode ? `${formatTrackerChargeInterval(tracker)}마다 ${minuteToTime(tracker.startMinute)}에 +1 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격`}</span></div>
                   <button type="button" className="entry-action" aria-label={`${tracker.name} 수정`} onClick={() => setEditing(tracker)}><Pencil size={16} /></button>
                 </header>
-                <div className="stack-value"><strong>{current}</strong><span>현재 스택</span></div>
-                {current < 0 ? <p className="stack-warning"><AlertTriangle size={14} /> 충전량보다 {Math.abs(current)}회 더 사용했습니다.</p> : null}
+                <div className="stack-value"><strong>{cumulativeLoading ? "…" : current}</strong><span>현재 스택</span></div>
+                {!cumulativeLoading && current < 0 ? <p className="stack-warning"><AlertTriangle size={14} /> 충전량보다 {Math.abs(current)}회 더 사용했습니다.</p> : null}
                 <dl className="stack-stats">
-                  <div><dt>오늘 충전</dt><dd>{charged} / {tracker.totalCharges}</dd></div>
-                  <div><dt>오늘 사용</dt><dd>{consumed}</dd></div>
-                  <div><dt>다음 충전</dt><dd>{next ? `${formatKstTime(next)} · ${formatRemainingDuration(next, now)} 후` : "완료"}</dd></div>
+                  <div><dt>{intervalMode ? "누적 충전" : "오늘 충전"}</dt><dd>{intervalMode ? `${charged}회` : `${charged} / ${tracker.totalCharges}`}</dd></div>
+                  <div><dt>{intervalMode ? "누적 사용" : "오늘 사용"}</dt><dd>{cumulativeLoading ? "확인 중" : consumed}</dd></div>
+                  <div><dt>다음 충전</dt><dd>{next ? `${intervalMode ? `${formatKstDateShort(next)} ` : ""}${formatKstTime(next)} · ${formatRemainingDuration(next, now)} 후` : "완료"}</dd></div>
                 </dl>
                 <div className="stack-actions">
                   <button type="button" className="primary-button stack-consume" disabled={busyTrackerId === tracker.id} onClick={() => void consume(tracker)}><Minus size={18} /> 1 사용</button>
@@ -141,7 +167,7 @@ export function StackTrackerScreen() {
         </section>
       )}
       <section className="stack-history" aria-labelledby="stack-history-title">
-        <div className="list-heading"><h2 id="stack-history-title">오늘 이벤트 {events.length.toLocaleString("ko-KR")}</h2>{metadata.hasPendingWrites ? <span className="sync-note">동기화 대기 중</span> : null}</div>
+        <div className="list-heading"><h2 id="stack-history-title">오늘 이벤트 {events.length.toLocaleString("ko-KR")}</h2>{metadata.hasPendingWrites || cumulativeState.hasPendingWrites ? <span className="sync-note">동기화 대기 중</span> : null}</div>
         {events.length === 0 ? <p className="state-message compact">아직 스택 이벤트가 없습니다.</p> : events.map((event) => (
           <article className="stack-event-row" key={event.id}>
             <time dateTime={event.occurredAt.toISOString()}>{formatKstTime(event.occurredAt)}</time>

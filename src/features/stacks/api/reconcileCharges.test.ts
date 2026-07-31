@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getChargeEventId, planMissingChargeEvents } from "./reconcileCharges";
+import { getChargeEventId, getIntervalChargeEventId, planMissingChargeEvents, planMissingIntervalChargeEvents } from "./reconcileCharges";
 import type { StackTracker } from "../model/stack.types";
 
 function tracker(overrides: Partial<StackTracker> = {}): StackTracker {
@@ -11,6 +11,8 @@ function tracker(overrides: Partial<StackTracker> = {}): StackTracker {
     startMinute: 0,
     endMinute: 1440,
     totalCharges: 24,
+    intervalDays: null,
+    anchorDate: null,
     isActive: true,
     createdAt: new Date(0),
     updatedAt: new Date(0),
@@ -40,5 +42,27 @@ describe("누락 충전 이벤트 보정", () => {
     const planned = planMissingChargeEvents([tracker()], new Set(), new Date("2026-08-01T00:00:00.000Z"));
     expect(planned.every((event) => event.periodDate === "2026-08-01")).toBe(true);
   });
-});
 
+  it("누적 주기형은 마지막 기록 다음 순번부터 과거 누락 충전을 보정한다", () => {
+    const intervalTracker = tracker({
+      scheduleMode: "interval_days",
+      startMinute: 540,
+      endMinute: 541,
+      totalCharges: 1,
+      intervalDays: 4,
+      anchorDate: "2026-07-01",
+    });
+    const planned = planMissingIntervalChargeEvents(
+      intervalTracker,
+      1,
+      new Date("2026-07-13T00:00:00.000Z"),
+    );
+    expect(planned.map((event) => event.chargeIndex)).toEqual([2, 3, 4]);
+    expect(planned.at(-1)?.id).toBe(getIntervalChargeEventId("rest", "2026-07-13", 4));
+  });
+
+  it("주기형 다음 충전이 미래이면 이벤트를 미리 만들지 않는다", () => {
+    const intervalTracker = tracker({ scheduleMode: "interval_days", startMinute: 540, endMinute: 541, totalCharges: 1, intervalDays: 7, anchorDate: "2026-08-01" });
+    expect(planMissingIntervalChargeEvents(intervalTracker, 0, new Date("2026-07-31T00:00:00.000Z"))).toEqual([]);
+  });
+});

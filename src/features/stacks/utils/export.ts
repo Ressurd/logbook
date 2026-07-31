@@ -16,6 +16,8 @@ export function createStackJsonBackup(
       startMinute: tracker.startMinute,
       endMinute: tracker.endMinute,
       totalCharges: tracker.totalCharges,
+      intervalDays: tracker.intervalDays,
+      anchorDate: tracker.anchorDate,
       isActive: tracker.isActive,
       createdAt: tracker.createdAt.toISOString(),
       updatedAt: tracker.updatedAt.toISOString(),
@@ -33,4 +35,3 @@ export function createStackJsonBackup(
     })),
   }, null, 2);
 }
-

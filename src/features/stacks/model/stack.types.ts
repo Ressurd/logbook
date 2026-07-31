@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 
-export type StackScheduleMode = "all_day" | "custom_time";
+export type StackScheduleMode = "all_day" | "custom_time" | "interval_days";
 export type StackEventType = "charge" | "consume";
 
 export type FirestoreStackTracker = {
@@ -9,6 +9,8 @@ export type FirestoreStackTracker = {
   startMinute: number;
   endMinute: number;
   totalCharges: number;
+  intervalDays?: number | null;
+  anchorDate?: string | null;
   isActive: boolean;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -21,6 +23,8 @@ export type StackTracker = {
   startMinute: number;
   endMinute: number;
   totalCharges: number;
+  intervalDays: number | null;
+  anchorDate: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -53,4 +57,3 @@ export type StackEvent = {
 
 export type ExportableStackTracker = Omit<StackTracker, "hasPendingWrites">;
 export type ExportableStackEvent = Omit<StackEvent, "hasPendingWrites">;
-
