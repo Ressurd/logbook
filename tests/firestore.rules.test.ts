@@ -268,7 +268,7 @@ describe("Firestore Security Rules", () => {
     await assertFails(setDoc(trackerRef("owner", "bad-count"), { ...validTrackerData(), totalCharges: 201 }));
   });
 
-  it("N일마다 누적하는 트래커의 주기와 첫 충전 날짜를 검증한다", async () => {
+  it("N일마다 누적하는 트래커의 주기와 호환 필드를 검증한다", async () => {
     const intervalTracker = {
       ...validTrackerData(),
       scheduleMode: "interval_days",
@@ -276,9 +276,10 @@ describe("Firestore Security Rules", () => {
       endMinute: 541,
       totalCharges: 1,
       intervalDays: 4,
-      anchorDate: "2026-08-01",
+      anchorDate: null,
     };
     await assertSucceeds(setDoc(trackerRef("owner", "interval"), intervalTracker));
+    await assertSucceeds(setDoc(trackerRef("owner", "legacy-interval"), { ...intervalTracker, anchorDate: "2026-08-01" }));
     await assertFails(setDoc(trackerRef("owner", "bad-interval"), { ...intervalTracker, intervalDays: 0 }));
     await assertFails(setDoc(trackerRef("owner", "bad-anchor"), { ...intervalTracker, anchorDate: "2026/08/01" }));
     await assertFails(setDoc(trackerRef("owner", "daily-with-interval"), { ...validTrackerData(), intervalDays: 4, anchorDate: "2026-08-01" }));

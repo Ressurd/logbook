@@ -1100,6 +1100,7 @@ button:disabled {
 .stack-form-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .stack-period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .stack-period-input > span { color: var(--text); font-size: 13px; white-space: nowrap; }
+.stack-form-note { margin: -5px 0 0; color: var(--muted); font-size: 11px; }
 .stack-preview { display: grid; gap: 2px; padding: 11px; border-radius: 9px; background: var(--accent-soft); }
 .stack-preview strong { color: var(--accent); font-size: 13px; }
 .stack-preview span { color: var(--muted); font-size: 11px; }

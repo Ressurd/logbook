@@ -21,8 +21,6 @@ type FormState = {
   endTime: string;
   totalCharges: string;
   intervalDays: string;
-  anchorDate: string;
-  chargeTime: string;
 };
 
 function initialState(tracker?: StackTracker | null): FormState {
@@ -34,8 +32,6 @@ function initialState(tracker?: StackTracker | null): FormState {
         endTime: minuteToTime(tracker.endMinute),
         totalCharges: String(tracker.totalCharges),
         intervalDays: String(tracker.intervalDays ?? 4),
-        anchorDate: tracker.anchorDate ?? getTodayKstDateString(),
-        chargeTime: minuteToTime(tracker.startMinute),
       }
     : {
         name: "",
@@ -44,8 +40,6 @@ function initialState(tracker?: StackTracker | null): FormState {
         endTime: "24:00",
         totalCharges: "24",
         intervalDays: "4",
-        anchorDate: getTodayKstDateString(),
-        chargeTime: "09:00",
       };
 }
 
@@ -68,9 +62,7 @@ export function StackTrackerForm({
   const parsed = useMemo(() => {
     const intervalMode = form.scheduleMode === "interval_days";
     const allDay = form.scheduleMode === "all_day";
-    const startMinute = intervalMode
-      ? timeToMinute(form.chargeTime)
-      : allDay ? 0 : timeToMinute(form.startTime);
+    const startMinute = intervalMode ? 0 : allDay ? 0 : timeToMinute(form.startTime);
     const endMinute = intervalMode
       ? startMinute === null ? null : Math.min(startMinute + 1, 1440)
       : allDay ? 1440 : timeToMinute(form.endTime, true);
@@ -81,7 +73,7 @@ export function StackTrackerForm({
       endMinute,
       totalCharges: intervalMode ? 1 : Number(form.totalCharges),
       intervalDays: intervalMode ? Number(form.intervalDays) : null,
-      anchorDate: intervalMode ? form.anchorDate : null,
+      anchorDate: null,
     });
   }, [form]);
 
@@ -89,7 +81,10 @@ export function StackTrackerForm({
     if (!parsed.success) return null;
     if (parsed.data.scheduleMode === "interval_days") {
       const samples = Array.from({ length: 4 }, (_, offset) =>
-        getIntervalChargeAt(parsed.data, offset + 1),
+        getIntervalChargeAt({
+          createdAt: tracker?.createdAt ?? new Date(),
+          intervalDays: parsed.data.intervalDays,
+        }, offset + 1),
       );
       return {
         interval: `${parsed.data.intervalDays}일`,
@@ -106,7 +101,7 @@ export function StackTrackerForm({
       times: samples.map(formatKstTime),
       omitted: schedule.length > 4,
     };
-  }, [parsed]);
+  }, [parsed, tracker]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -126,7 +121,7 @@ export function StackTrackerForm({
     <Modal
       open={open}
       title={tracker ? "스택 수정" : "스택 만들기"}
-      description="매일 나눠 충전하거나, N일마다 1회씩 계속 누적할 수 있습니다."
+      description="주기형은 만든 시각부터 N일이 지날 때마다 제한 없이 +1씩 누적됩니다."
       onClose={onClose}
     >
       <form className="stack-form" onSubmit={(event) => void submit(event)}>
@@ -148,7 +143,7 @@ export function StackTrackerForm({
           >
             <option value="all_day">하루 전체 (00:00–24:00)</option>
             <option value="custom_time">시간 직접 지정</option>
-            <option value="interval_days">N일마다 1회 누적</option>
+            <option value="interval_days">만든 시각부터 N일마다 계속 누적</option>
           </select>
         </label>
         {form.scheduleMode === "custom_time" ? (
@@ -172,16 +167,7 @@ export function StackTrackerForm({
                 <span>일마다 +1</span>
               </div>
             </label>
-            <div className="stack-form-times">
-              <label>
-                <span>첫 충전 날짜</span>
-                <input type="date" value={form.anchorDate} onChange={(event) => setForm((current) => ({ ...current, anchorDate: event.target.value }))} />
-              </label>
-              <label>
-                <span>충전 시각</span>
-                <input inputMode="numeric" value={form.chargeTime} placeholder="09:00" onChange={(event) => setForm((current) => ({ ...current, chargeTime: event.target.value }))} />
-              </label>
-            </div>
+            <p className="stack-form-note">첫 충전은 만든 시각에서 설정한 일수가 지난 뒤 발생하며, 최대 횟수 없이 계속 쌓입니다.</p>
           </>
         ) : (
           <label>

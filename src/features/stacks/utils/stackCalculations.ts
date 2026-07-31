@@ -1,5 +1,5 @@
 import type { StackTracker } from "../model/stack.types";
-import { addDaysToDateString, getKstDayRange, getTodayKstDateString } from "@/features/logbook/utils/date";
+import { getKstDayRange, getTodayKstDateString } from "@/features/logbook/utils/date";
 
 export type StackScheduleInput = Pick<
   StackTracker,
@@ -8,7 +8,7 @@ export type StackScheduleInput = Pick<
 
 export type IntervalStackScheduleInput = Pick<
   StackTracker,
-  "anchorDate" | "intervalDays" | "startMinute"
+  "createdAt" | "intervalDays"
 >;
 
 export function getKstPeriodDate(now = new Date()): string {
@@ -89,15 +89,13 @@ export function getNextChargeAt(
   );
 }
 
-function validateIntervalSchedule(tracker: IntervalStackScheduleInput): asserts tracker is IntervalStackScheduleInput & { anchorDate: string; intervalDays: number } {
-  if (!tracker.anchorDate) throw new Error("첫 충전 날짜가 필요합니다.");
+function validateIntervalSchedule(tracker: IntervalStackScheduleInput): asserts tracker is IntervalStackScheduleInput & { intervalDays: number } {
   if (!Number.isInteger(tracker.intervalDays) || tracker.intervalDays === null || tracker.intervalDays < 1 || tracker.intervalDays > 365) {
     throw new Error("충전 주기는 1~365일 사이 정수여야 합니다.");
   }
-  if (!Number.isInteger(tracker.startMinute) || tracker.startMinute < 0 || tracker.startMinute > 1439) {
-    throw new Error("충전 시각이 올바르지 않습니다.");
+  if (!(tracker.createdAt instanceof Date) || Number.isNaN(tracker.createdAt.getTime())) {
+    throw new Error("트래커 생성 시각이 올바르지 않습니다.");
   }
-  getKstDayRange(tracker.anchorDate);
 }
 
 export function getIntervalChargeAt(
@@ -108,21 +106,9 @@ export function getIntervalChargeAt(
   if (!Number.isInteger(chargeIndex) || chargeIndex < 1) {
     throw new Error("충전 순번은 1 이상의 정수여야 합니다.");
   }
-  const chargeDate = addDaysToDateString(
-    tracker.anchorDate,
-    tracker.intervalDays * (chargeIndex - 1),
-  );
   return new Date(
-    getKstDayRange(chargeDate).start.getTime() + tracker.startMinute * 60_000,
+    tracker.createdAt.getTime() + tracker.intervalDays * chargeIndex * 86_400_000,
   );
-}
-
-function calendarDayDifference(from: string, to: string): number {
-  const toUtc = (value: string) => {
-    const [year, month, day] = value.split("-").map(Number);
-    return Date.UTC(year, month - 1, day);
-  };
-  return Math.floor((toUtc(to) - toUtc(from)) / 86_400_000);
 }
 
 export function calculateIntervalChargedCount(
@@ -130,13 +116,9 @@ export function calculateIntervalChargedCount(
   now = new Date(),
 ): number {
   validateIntervalSchedule(tracker);
-  const firstCharge = getIntervalChargeAt(tracker, 1);
-  if (now.getTime() < firstCharge.getTime()) return 0;
-  const today = getKstPeriodDate(now);
-  const daysSinceAnchor = calendarDayDifference(tracker.anchorDate, today);
-  const possibleCount = Math.floor(daysSinceAnchor / tracker.intervalDays) + 1;
-  const latest = getIntervalChargeAt(tracker, possibleCount);
-  return latest.getTime() <= now.getTime() ? possibleCount : possibleCount - 1;
+  const elapsed = now.getTime() - tracker.createdAt.getTime();
+  if (elapsed <= 0) return 0;
+  return Math.floor(elapsed / (tracker.intervalDays * 86_400_000));
 }
 
 export function calculateIntervalCurrentStack(

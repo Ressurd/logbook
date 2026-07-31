@@ -75,26 +75,31 @@ describe("스택 시간 계산", () => {
     expect(() => calculateChargeSchedule({ startMinute: 0, endMinute: 1440, totalCharges: 201 }, "2026-07-13")).toThrow("1~200");
   });
 
-  it("4일마다 충전되는 스택을 첫 날짜부터 계속 누적한다", () => {
-    const tracker = { anchorDate: "2026-07-01", intervalDays: 4, startMinute: 540 };
-    expect(getIntervalChargeAt(tracker, 1).toISOString()).toBe("2026-07-01T00:00:00.000Z");
-    expect(getIntervalChargeAt(tracker, 2).toISOString()).toBe("2026-07-05T00:00:00.000Z");
-    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-12T23:59:59.999Z"))).toBe(3);
-    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-13T00:00:00.000Z"))).toBe(4);
+  it("만든 시각부터 4일이 지날 때마다 계속 누적한다", () => {
+    const tracker = { createdAt: new Date("2026-07-01T03:12:34.000Z"), intervalDays: 4 };
+    expect(getIntervalChargeAt(tracker, 1).toISOString()).toBe("2026-07-05T03:12:34.000Z");
+    expect(getIntervalChargeAt(tracker, 2).toISOString()).toBe("2026-07-09T03:12:34.000Z");
+    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-13T03:12:33.999Z"))).toBe(2);
+    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-13T03:12:34.000Z"))).toBe(3);
   });
 
   it("주기형 스택은 사용하지 않으면 누적되고 사용량을 전체 누적에서 차감한다", () => {
-    const tracker = { anchorDate: "2026-07-01", intervalDays: 7, startMinute: 0 };
-    const now = new Date("2026-07-21T15:00:00.000Z");
+    const tracker = { createdAt: new Date("2026-07-01T15:00:00.000Z"), intervalDays: 7 };
+    const now = new Date("2026-07-29T15:00:00.000Z");
     expect(calculateIntervalChargedCount(tracker, now)).toBe(4);
     expect(calculateIntervalCurrentStack(tracker, 1, now)).toBe(3);
     expect(calculateIntervalCurrentStack(tracker, 5, now)).toBe(-1);
-    expect(getNextIntervalChargeAt(tracker, now).toISOString()).toBe("2026-07-28T15:00:00.000Z");
+    expect(getNextIntervalChargeAt(tracker, now).toISOString()).toBe("2026-08-05T15:00:00.000Z");
   });
 
-  it("첫 충전 시각 전에는 0이고 정각부터 1이다", () => {
-    const tracker = { anchorDate: "2026-07-31", intervalDays: 4, startMinute: 600 };
-    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-31T00:59:59.999Z"))).toBe(0);
-    expect(calculateIntervalChargedCount(tracker, new Date("2026-07-31T01:00:00.000Z"))).toBe(1);
+  it("생성 직후에는 0이고 첫 주기가 지난 정각부터 1이다", () => {
+    const tracker = { createdAt: new Date("2026-07-31T01:00:00.000Z"), intervalDays: 4 };
+    expect(calculateIntervalChargedCount(tracker, new Date("2026-08-04T00:59:59.999Z"))).toBe(0);
+    expect(calculateIntervalChargedCount(tracker, new Date("2026-08-04T01:00:00.000Z"))).toBe(1);
+  });
+
+  it("누적 횟수에는 최대치가 없다", () => {
+    const tracker = { createdAt: new Date("2020-01-01T00:00:00.000Z"), intervalDays: 1 };
+    expect(calculateIntervalChargedCount(tracker, new Date("2022-09-27T00:00:00.000Z"))).toBe(1_000);
   });
 });

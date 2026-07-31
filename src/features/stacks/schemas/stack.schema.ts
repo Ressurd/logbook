@@ -20,8 +20,8 @@ export const stackTrackerInputSchema = z
       if (value.intervalDays === null) {
         context.addIssue({ code: "custom", message: "충전 주기를 입력해주세요.", path: ["intervalDays"] });
       }
-      if (!value.anchorDate || !isValidDateString(value.anchorDate)) {
-        context.addIssue({ code: "custom", message: "첫 충전 날짜를 확인해주세요.", path: ["anchorDate"] });
+      if (value.anchorDate !== null && !isValidDateString(value.anchorDate)) {
+        context.addIssue({ code: "custom", message: "이전 버전의 첫 충전 날짜가 올바르지 않습니다.", path: ["anchorDate"] });
       }
       if (value.totalCharges !== 1) {
         context.addIssue({ code: "custom", message: "주기형 스택은 한 주기마다 1회 충전됩니다.", path: ["totalCharges"] });

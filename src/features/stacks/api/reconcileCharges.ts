@@ -83,9 +83,6 @@ export function planMissingIntervalChargeEvents(
   if (!tracker.isActive || tracker.scheduleMode !== "interval_days") return [];
   const chargedCount = calculateIntervalChargedCount(tracker, now);
   const missingCount = Math.max(0, chargedCount - lastChargeIndex);
-  if (missingCount > 5_000) {
-    throw new Error("누적 충전 기록이 5,000개를 넘어 첫 충전 날짜를 조정해야 합니다.");
-  }
   return Array.from({ length: missingCount }, (_, offset) => {
     const chargeIndex = lastChargeIndex + offset + 1;
     const occurredAt = getIntervalChargeAt(tracker, chargeIndex);

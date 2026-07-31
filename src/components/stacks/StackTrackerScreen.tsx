@@ -67,8 +67,6 @@ export function StackTrackerScreen() {
           editing.scheduleMode === "interval_days"
           && (
             editing.intervalDays !== input.intervalDays
-            || editing.anchorDate !== input.anchorDate
-            || editing.startMinute !== input.startMinute
           )
         )
       );
@@ -147,7 +145,7 @@ export function StackTrackerScreen() {
             return (
               <article key={tracker.id} className="stack-card">
                 <header className="stack-card-header">
-                  <div><h2>{tracker.name}</h2><span>{intervalMode ? `${formatTrackerChargeInterval(tracker)}마다 ${minuteToTime(tracker.startMinute)}에 +1 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격`}</span></div>
+                  <div><h2>{tracker.name}</h2><span>{intervalMode ? `만든 시각부터 ${formatTrackerChargeInterval(tracker)}마다 +1 · 제한 없이 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격`}</span></div>
                   <button type="button" className="entry-action" aria-label={`${tracker.name} 수정`} onClick={() => setEditing(tracker)}><Pencil size={16} /></button>
                 </header>
                 <div className="stack-value"><strong>{cumulativeLoading ? "…" : current}</strong><span>현재 스택</span></div>

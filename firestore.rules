@@ -126,8 +126,13 @@ service cloud.firestore {
             && request.resource.data.intervalDays is int
             && request.resource.data.intervalDays >= 1
             && request.resource.data.intervalDays <= 365
-            && request.resource.data.anchorDate is string
-            && request.resource.data.anchorDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+            && (
+              request.resource.data.anchorDate == null
+              || (
+                request.resource.data.anchorDate is string
+                && request.resource.data.anchorDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+              )
+            )
           )
         );
     }
