@@ -67,22 +67,40 @@ service cloud.firestore {
     }
 
     function hasLegacyTrackerFields() {
-      let fields = [
+      let requiredFields = [
         'name', 'scheduleMode', 'startMinute', 'endMinute',
         'totalCharges', 'isActive', 'createdAt', 'updatedAt'
       ];
-      return request.resource.data.keys().hasAll(fields)
-        && request.resource.data.keys().hasOnly(fields);
+      let allowedFields = [
+        'name', 'scheduleMode', 'startMinute', 'endMinute',
+        'totalCharges', 'sortOrder', 'isActive', 'createdAt', 'updatedAt'
+      ];
+      return request.resource.data.keys().hasAll(requiredFields)
+        && request.resource.data.keys().hasOnly(allowedFields);
     }
 
     function hasExactTrackerFields() {
-      let fields = [
+      let requiredFields = [
         'name', 'scheduleMode', 'startMinute', 'endMinute',
         'totalCharges', 'intervalDays', 'anchorDate',
         'isActive', 'createdAt', 'updatedAt'
       ];
-      return request.resource.data.keys().hasAll(fields)
-        && request.resource.data.keys().hasOnly(fields);
+      let allowedFields = [
+        'name', 'scheduleMode', 'startMinute', 'endMinute',
+        'totalCharges', 'intervalDays', 'anchorDate', 'sortOrder',
+        'isActive', 'createdAt', 'updatedAt'
+      ];
+      return request.resource.data.keys().hasAll(requiredFields)
+        && request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function hasValidTrackerSortOrder() {
+      return !request.resource.data.keys().hasAny(['sortOrder'])
+        || (
+          request.resource.data.sortOrder is number
+          && request.resource.data.sortOrder >= -9007199254740991
+          && request.resource.data.sortOrder <= 9007199254740991
+        );
     }
 
     function hasValidTrackerCommonData() {
@@ -107,12 +125,14 @@ service cloud.firestore {
     function hasValidLegacyTrackerData() {
       return hasLegacyTrackerFields()
         && hasValidTrackerCommonData()
+        && hasValidTrackerSortOrder()
         && request.resource.data.scheduleMode in ['all_day', 'custom_time'];
     }
 
     function hasValidTrackerData() {
       return hasExactTrackerFields()
         && hasValidTrackerCommonData()
+        && hasValidTrackerSortOrder()
         && request.resource.data.scheduleMode in ['all_day', 'custom_time', 'interval_days']
         && (
           (
@@ -151,7 +171,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'name', 'scheduleMode', 'startMinute', 'endMinute',
-          'totalCharges', 'intervalDays', 'anchorDate',
+          'totalCharges', 'intervalDays', 'anchorDate', 'sortOrder',
           'isActive', 'updatedAt'
         ]);
       allow delete: if false;

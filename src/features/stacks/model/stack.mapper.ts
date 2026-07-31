@@ -16,6 +16,7 @@ export function mapStackTrackerDocument(
   const data = snapshot.data(options);
   if (!data) throw new Error("스택 트래커 문서의 데이터가 없습니다.");
   const fallback = new Date();
+  const createdAt = data.createdAt?.toDate() ?? fallback;
   return {
     id: snapshot.id,
     name: data.name,
@@ -25,9 +26,12 @@ export function mapStackTrackerDocument(
     totalCharges: data.totalCharges,
     intervalDays: data.intervalDays ?? null,
     anchorDate: data.anchorDate ?? null,
+    sortOrder: typeof data.sortOrder === "number" && Number.isFinite(data.sortOrder)
+      ? data.sortOrder
+      : createdAt.getTime(),
     isActive: data.isActive,
-    createdAt: data.createdAt?.toDate() ?? fallback,
-    updatedAt: data.updatedAt?.toDate() ?? data.createdAt?.toDate() ?? fallback,
+    createdAt,
+    updatedAt: data.updatedAt?.toDate() ?? createdAt,
     hasPendingWrites: snapshot.metadata.hasPendingWrites,
   };
 }

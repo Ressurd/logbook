@@ -261,11 +261,13 @@ describe("Firestore Security Rules", () => {
 
   it("본인 스택 트래커만 정확한 필드와 서버 시각으로 생성한다", async () => {
     await assertSucceeds(setDoc(trackerRef("owner"), validTrackerData()));
+    await assertSucceeds(setDoc(trackerRef("owner", "ordered"), { ...validTrackerData(), sortOrder: 100.5 }));
     await assertSucceeds(getDoc(trackerRef("owner")));
     await assertFails(setDoc(trackerRef("owner", "extra"), { ...validTrackerData(), unexpected: true }));
     await assertFails(setDoc(trackerRef("owner", "inactive"), { ...validTrackerData(), isActive: false }));
     await assertFails(setDoc(trackerRef("owner", "bad-time"), { ...validTrackerData(), startMinute: 600, endMinute: 500 }));
     await assertFails(setDoc(trackerRef("owner", "bad-count"), { ...validTrackerData(), totalCharges: 201 }));
+    await assertFails(setDoc(trackerRef("owner", "bad-order"), { ...validTrackerData(), sortOrder: "first" }));
   });
 
   it("N일마다 누적하는 트래커의 주기와 호환 필드를 검증한다", async () => {
@@ -298,12 +300,13 @@ describe("Firestore Security Rules", () => {
         updatedAt: Timestamp.fromMillis(1),
       });
     });
-    await assertSucceeds(updateDoc(trackerRef("owner", "legacy"), { isActive: false, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(trackerRef("owner", "legacy"), { sortOrder: 10, isActive: false, updatedAt: serverTimestamp() }));
   });
 
   it("스택 트래커 수정은 createdAt 보존과 허용 필드만 요구하고 실제 삭제를 막는다", async () => {
     await assertSucceeds(setDoc(trackerRef("owner"), validTrackerData()));
     await assertSucceeds(updateDoc(trackerRef("owner"), { name: "집중", isActive: false, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(trackerRef("owner"), { sortOrder: 20.5, updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(trackerRef("owner"), { createdAt: Timestamp.fromMillis(1), updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(trackerRef("owner"), { name: deleteField(), updatedAt: serverTimestamp() }));
     await assertFails(deleteDoc(trackerRef("owner")));

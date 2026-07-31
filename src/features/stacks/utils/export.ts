@@ -18,6 +18,7 @@ export function createStackJsonBackup(
       totalCharges: tracker.totalCharges,
       intervalDays: tracker.intervalDays,
       anchorDate: tracker.anchorDate,
+      sortOrder: tracker.sortOrder,
       isActive: tracker.isActive,
       createdAt: tracker.createdAt.toISOString(),
       updatedAt: tracker.updatedAt.toISOString(),

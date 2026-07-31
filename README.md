@@ -272,7 +272,7 @@ users/{uid}/stackTrackers/{trackerId}
 users/{uid}/stackEvents/{eventId}
 ```
 
-트래커 문서에는 이름, `all_day | custom_time | interval_days`, 시작/종료 분, 하루 충전 횟수(1~200), `intervalDays`, 호환용 `anchorDate`, 활성 상태, 생성/수정 서버 시각을 저장합니다. 주기형의 실제 기준 시각은 서버가 기록한 `createdAt`이며 `anchorDate`는 새 문서에서 `null`입니다. 기존 트래커에는 새 필드가 없어도 읽을 수 있습니다. 이벤트 문서에는 트래커 ID와 당시 이름, `charge | consume`, KST 날짜, 충전 인덱스, `1 | -1`, 실제 발생 시각과 생성 서버 시각을 저장합니다.
+트래커 문서에는 이름, `all_day | custom_time | interval_days`, 시작/종료 분, 하루 충전 횟수(1~200), `intervalDays`, 호환용 `anchorDate`, 선택적인 `sortOrder`, 활성 상태, 생성/수정 서버 시각을 저장합니다. 주기형의 실제 기준 시각은 서버가 기록한 `createdAt`이며 `anchorDate`는 새 문서에서 `null`입니다. 카드의 위·아래 버튼은 인접한 두 트래커의 `sortOrder`를 배치로 맞바꿔 모든 기기에서 같은 순서를 유지합니다. 기존 트래커에 `sortOrder`가 없으면 생성 시각 순서를 사용하므로 마이그레이션 없이 동작합니다. 이벤트 문서에는 트래커 ID와 당시 이름, `charge | consume`, KST 날짜, 충전 인덱스, `1 | -1`, 실제 발생 시각과 생성 서버 시각을 저장합니다.
 
 ### 충전 보정과 오프라인 동작
 

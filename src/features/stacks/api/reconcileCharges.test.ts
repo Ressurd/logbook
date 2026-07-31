@@ -13,6 +13,7 @@ function tracker(overrides: Partial<StackTracker> = {}): StackTracker {
     totalCharges: 24,
     intervalDays: null,
     anchorDate: null,
+    sortOrder: 0,
     isActive: true,
     createdAt: new Date(0),
     updatedAt: new Date(0),

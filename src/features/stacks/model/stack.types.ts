@@ -11,6 +11,7 @@ export type FirestoreStackTracker = {
   totalCharges: number;
   intervalDays?: number | null;
   anchorDate?: string | null;
+  sortOrder?: number;
   isActive: boolean;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -25,6 +26,7 @@ export type StackTracker = {
   totalCharges: number;
   intervalDays: number | null;
   anchorDate: string | null;
+  sortOrder: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

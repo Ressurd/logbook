@@ -1,12 +1,12 @@
 "use client";
 
-import { AlertTriangle, Clock3, Minus, Pencil, Plus, RefreshCw, Zap } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Clock3, Minus, Pencil, Plus, RefreshCw, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { StackTrackerForm } from "./StackTrackerForm";
 import { createConsumeEvent } from "@/features/stacks/api/createConsumeEvent";
-import { createStackTracker, deactivateStackTracker, replaceStackTracker, updateStackTracker } from "@/features/stacks/api/writeStackTracker";
+import { createStackTracker, deactivateStackTracker, replaceStackTracker, swapStackTrackerOrder, updateStackTracker } from "@/features/stacks/api/writeStackTracker";
 import type { StackTracker } from "@/features/stacks/model/stack.types";
 import type { StackTrackerInput } from "@/features/stacks/schemas/stack.schema";
 import {
@@ -71,7 +71,7 @@ export function StackTrackerScreen() {
         )
       );
       if (editing && shouldReplace) {
-        await replaceStackTracker(user!.uid, editing.id, input);
+        await replaceStackTracker(user!.uid, editing.id, input, editing.sortOrder);
       } else if (editing) await updateStackTracker(user!.uid, editing.id, input);
       else await createStackTracker(user!.uid, input);
       setEditing(undefined);
@@ -116,6 +116,33 @@ export function StackTrackerScreen() {
     }
   };
 
+  const move = async (index: number, direction: -1 | 1) => {
+    const destination = index + direction;
+    if (destination < 0 || destination >= trackers.length || mutationInFlightRef.current) return;
+    const current = trackers[index];
+    const adjacent = trackers[destination];
+    const earlier = direction === -1 ? adjacent : current;
+    const later = direction === -1 ? current : adjacent;
+    mutationInFlightRef.current = true;
+    setBusyTrackerId(current.id);
+    setMessage(null);
+    try {
+      const outcome = await waitForWriteOrQueue(
+        swapStackTrackerOrder(user!.uid, earlier, later),
+        navigator.onLine ? undefined : 0,
+      );
+      if (outcome.status === "queued") {
+        setMessage("표시 순서를 이 기기에 저장했습니다. 연결되면 동기화됩니다.");
+        void outcome.completion.catch(() => setMessage("표시 순서 동기화에 실패했습니다. 다시 이동해주세요."));
+      }
+    } catch (moveError) {
+      setMessage(getErrorMessage(moveError, "표시 순서를 변경하지 못했습니다."));
+    } finally {
+      mutationInFlightRef.current = false;
+      setBusyTrackerId(null);
+    }
+  };
+
   return (
     <AppShell>
       <section className="page-heading">
@@ -129,7 +156,7 @@ export function StackTrackerScreen() {
         <div className="empty-state"><Zap size={26} /><p>활성 스택이 없습니다.</p><span>매일 나눠 충전하거나 며칠마다 한 번씩 누적해보세요.</span></div>
       ) : (
         <section className="stack-grid" aria-label="활성 스택 목록">
-          {trackers.map((tracker) => {
+          {trackers.map((tracker, index) => {
             const intervalMode = tracker.scheduleMode === "interval_days";
             const cumulativeLoading = intervalMode && cumulativeState.loading;
             const consumed = intervalMode
@@ -146,7 +173,11 @@ export function StackTrackerScreen() {
               <article key={tracker.id} className="stack-card">
                 <header className="stack-card-header">
                   <div><h2>{tracker.name}</h2><span>{intervalMode ? `만든 시각부터 ${formatTrackerChargeInterval(tracker)}마다 +1 · 제한 없이 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격`}</span></div>
-                  <button type="button" className="entry-action" aria-label={`${tracker.name} 수정`} onClick={() => setEditing(tracker)}><Pencil size={16} /></button>
+                  <div className="stack-card-controls">
+                    <button type="button" className="entry-action" aria-label={`${tracker.name} 위로 이동`} title="위로 이동" disabled={index === 0 || busyTrackerId !== null} onClick={() => void move(index, -1)}><ArrowUp size={16} /></button>
+                    <button type="button" className="entry-action" aria-label={`${tracker.name} 아래로 이동`} title="아래로 이동" disabled={index === trackers.length - 1 || busyTrackerId !== null} onClick={() => void move(index, 1)}><ArrowDown size={16} /></button>
+                    <button type="button" className="entry-action" aria-label={`${tracker.name} 수정`} title="수정" disabled={busyTrackerId !== null} onClick={() => setEditing(tracker)}><Pencil size={16} /></button>
+                  </div>
                 </header>
                 <div className="stack-value"><strong>{cumulativeLoading ? "…" : current}</strong><span>현재 스택</span></div>
                 {!cumulativeLoading && current < 0 ? <p className="stack-warning"><AlertTriangle size={14} /> 충전량보다 {Math.abs(current)}회 더 사용했습니다.</p> : null}

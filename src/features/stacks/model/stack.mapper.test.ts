@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { Timestamp, type DocumentSnapshot } from "firebase/firestore";
 
-import { toCachedStackEvent } from "./stack.mapper";
-import type { StackEvent } from "./stack.types";
+import { mapStackTrackerDocument, toCachedStackEvent } from "./stack.mapper";
+import type { FirestoreStackTracker, StackEvent } from "./stack.types";
 
 function event(eventType: StackEvent["eventType"]): StackEvent {
   return {
@@ -27,5 +28,26 @@ describe("스택 검색 문구", () => {
     expect(charge.sourceType).toBe("stack_event");
     expect(charge.occurredAt).toBe(1000);
   });
-});
 
+  it("이전 트래커에 표시 순서가 없으면 생성 시각을 기본 순서로 사용한다", () => {
+    const createdAt = Timestamp.fromMillis(5_000);
+    const snapshot = {
+      id: "legacy",
+      data: () => ({
+        name: "휴식",
+        scheduleMode: "all_day",
+        startMinute: 0,
+        endMinute: 1440,
+        totalCharges: 24,
+        intervalDays: null,
+        anchorDate: null,
+        isActive: true,
+        createdAt,
+        updatedAt: createdAt,
+      }),
+      metadata: { hasPendingWrites: false },
+    } as unknown as DocumentSnapshot<FirestoreStackTracker>;
+
+    expect(mapStackTrackerDocument(snapshot).sortOrder).toBe(5_000);
+  });
+});

@@ -14,6 +14,7 @@ import type {
   StackEvent,
   StackTracker,
 } from "../model/stack.types";
+import { sortStackTrackers } from "../utils/stackOrdering";
 import { getKstDayRange } from "@/features/logbook/utils/date";
 import {
   getUserStackEventsCollection,
@@ -40,12 +41,12 @@ export function subscribeActiveStackTrackers(
     { includeMetadataChanges: true },
     (snapshot) => {
       onData(
-        snapshot.docs.map((document) =>
+        sortStackTrackers(snapshot.docs.map((document) =>
           mapStackTrackerDocument(
             document as DocumentSnapshot<FirestoreStackTracker>,
             { serverTimestamps: "estimate" },
           ),
-        ),
+        )),
         {
           fromCache: snapshot.metadata.fromCache,
           hasPendingWrites: snapshot.metadata.hasPendingWrites,
