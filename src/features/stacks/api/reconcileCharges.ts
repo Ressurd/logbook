@@ -61,7 +61,9 @@ export function planMissingChargeEvents(
       calculateChargeSchedule(tracker, periodDate).flatMap((occurredAt, offset) => {
         const chargeIndex = offset + 1;
         const id = getChargeEventId(tracker.id, periodDate, chargeIndex);
-        return occurredAt.getTime() <= nowMs && !existingEventIds.has(id)
+        return occurredAt.getTime() >= tracker.createdAt.getTime()
+          && occurredAt.getTime() <= nowMs
+          && !existingEventIds.has(id)
           ? [{
               id,
               trackerId: tracker.id,

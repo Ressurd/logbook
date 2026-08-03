@@ -1,5 +1,5 @@
 import type { StackTracker } from "../model/stack.types";
-import { getKstDayRange, getTodayKstDateString } from "@/features/logbook/utils/date";
+import { addDaysToDateString, getKstDayRange, getTodayKstDateString } from "@/features/logbook/utils/date";
 
 export type StackScheduleInput = Pick<
   StackTracker,
@@ -10,6 +10,8 @@ export type IntervalStackScheduleInput = Pick<
   StackTracker,
   "createdAt" | "intervalDays"
 >;
+
+export type DailyStackScheduleInput = StackScheduleInput & Pick<StackTracker, "createdAt">;
 
 export function getKstPeriodDate(now = new Date()): string {
   return getTodayKstDateString(now);
@@ -76,6 +78,50 @@ export function calculateCurrentStack(
   return calculateChargedCount(tracker, periodDate, now) - consumedCount;
 }
 
+function calendarDayDifference(from: string, to: string): number {
+  const toUtc = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.floor((toUtc(to) - toUtc(from)) / 86_400_000);
+}
+
+export function calculateDailyCumulativeChargedCount(
+  tracker: DailyStackScheduleInput,
+  now = new Date(),
+): number {
+  const createdAtMs = tracker.createdAt.getTime();
+  const nowMs = now.getTime();
+  if (Number.isNaN(createdAtMs)) throw new Error("트래커 생성 시각이 올바르지 않습니다.");
+  if (nowMs < createdAtMs) return 0;
+
+  const createdDate = getKstPeriodDate(tracker.createdAt);
+  const currentDate = getKstPeriodDate(now);
+  if (createdDate === currentDate) {
+    return calculateChargeSchedule(tracker, currentDate).filter((scheduledAt) => {
+      const scheduledAtMs = scheduledAt.getTime();
+      return scheduledAtMs >= createdAtMs && scheduledAtMs <= nowMs;
+    }).length;
+  }
+
+  const createdDayCount = calculateChargeSchedule(tracker, createdDate).filter(
+    (scheduledAt) => scheduledAt.getTime() >= createdAtMs,
+  ).length;
+  const elapsedDays = calendarDayDifference(createdDate, currentDate);
+  const completedMiddleDays = Math.max(0, elapsedDays - 1);
+  return createdDayCount
+    + completedMiddleDays * tracker.totalCharges
+    + calculateChargedCount(tracker, currentDate, now);
+}
+
+export function calculateDailyCumulativeCurrentStack(
+  tracker: DailyStackScheduleInput,
+  consumedCount: number,
+  now = new Date(),
+): number {
+  return calculateDailyCumulativeChargedCount(tracker, now) - consumedCount;
+}
+
 export function getNextChargeAt(
   tracker: StackScheduleInput,
   periodDate: string,
@@ -87,6 +133,15 @@ export function getNextChargeAt(
       (scheduledAt) => scheduledAt.getTime() > nowMs,
     ) ?? null
   );
+}
+
+export function getNextDailyChargeAt(
+  tracker: StackScheduleInput,
+  now = new Date(),
+): Date {
+  const currentDate = getKstPeriodDate(now);
+  return getNextChargeAt(tracker, currentDate, now)
+    ?? calculateChargeSchedule(tracker, addDaysToDateString(currentDate, 1))[0];
 }
 
 function validateIntervalSchedule(tracker: IntervalStackScheduleInput): asserts tracker is IntervalStackScheduleInput & { intervalDays: number } {
@@ -139,7 +194,7 @@ export function getNextIntervalChargeAt(
 export function getNextTrackerChargeAt(tracker: StackTracker, now = new Date()): Date | null {
   return tracker.scheduleMode === "interval_days"
     ? getNextIntervalChargeAt(tracker, now)
-    : getNextChargeAt(tracker, getKstPeriodDate(now), now);
+    : getNextDailyChargeAt(tracker, now);
 }
 
 export function formatTrackerChargeInterval(tracker: StackTracker): string {

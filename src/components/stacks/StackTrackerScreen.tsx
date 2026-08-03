@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, Clock3, Minus, Pencil, Plus, RefreshCw, Zap } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { StackTrackerForm } from "./StackTrackerForm";
@@ -10,8 +10,8 @@ import { createStackTracker, deactivateStackTracker, replaceStackTracker, swapSt
 import type { StackTracker } from "@/features/stacks/model/stack.types";
 import type { StackTrackerInput } from "@/features/stacks/schemas/stack.schema";
 import {
-  calculateChargedCount,
-  calculateCurrentStack,
+  calculateDailyCumulativeChargedCount,
+  calculateDailyCumulativeCurrentStack,
   calculateIntervalChargedCount,
   calculateIntervalCurrentStack,
   formatChargeInterval,
@@ -48,12 +48,6 @@ export function StackTrackerScreen() {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, [reconcile]);
-
-  const consumedByTracker = useMemo(() => {
-    const counts = new Map<string, number>();
-    events.filter((event) => event.eventType === "consume").forEach((event) => counts.set(event.trackerId, (counts.get(event.trackerId) ?? 0) + 1));
-    return counts;
-  }, [events]);
 
   const save = async (input: StackTrackerInput) => {
     if (saveInFlightRef.current) return;
@@ -158,21 +152,20 @@ export function StackTrackerScreen() {
         <section className="stack-grid" aria-label="활성 스택 목록">
           {trackers.map((tracker, index) => {
             const intervalMode = tracker.scheduleMode === "interval_days";
-            const cumulativeLoading = intervalMode && cumulativeState.loading;
-            const consumed = intervalMode
-              ? cumulativeState.counts[tracker.id] ?? 0
-              : consumedByTracker.get(tracker.id) ?? 0;
+            const cumulativeLoading = cumulativeState.loading;
+            const consumed = cumulativeState.counts[tracker.id] ?? 0;
             const charged = intervalMode
               ? calculateIntervalChargedCount(tracker, now)
-              : calculateChargedCount(tracker, periodDate, now);
+              : calculateDailyCumulativeChargedCount(tracker, now);
             const current = intervalMode
               ? calculateIntervalCurrentStack(tracker, consumed, now)
-              : calculateCurrentStack(tracker, periodDate, consumed, now);
+              : calculateDailyCumulativeCurrentStack(tracker, consumed, now);
             const next = getNextTrackerChargeAt(tracker, now);
+            const nextIsAnotherDay = next && getKstPeriodDate(next) !== periodDate;
             return (
               <article key={tracker.id} className="stack-card">
                 <header className="stack-card-header">
-                  <div><h2>{tracker.name}</h2><span>{intervalMode ? `만든 시각부터 ${formatTrackerChargeInterval(tracker)}마다 +1 · 제한 없이 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격`}</span></div>
+                  <div><h2>{tracker.name}</h2><span>{intervalMode ? `만든 시각부터 ${formatTrackerChargeInterval(tracker)}마다 +1 · 제한 없이 누적` : `${minuteToTime(tracker.startMinute)}–${minuteToTime(tracker.endMinute)} · ${formatChargeInterval(tracker)} 간격 · 계속 누적`}</span></div>
                   <div className="stack-card-controls">
                     <button type="button" className="entry-action" aria-label={`${tracker.name} 위로 이동`} title="위로 이동" disabled={index === 0 || busyTrackerId !== null} onClick={() => void move(index, -1)}><ArrowUp size={16} /></button>
                     <button type="button" className="entry-action" aria-label={`${tracker.name} 아래로 이동`} title="아래로 이동" disabled={index === trackers.length - 1 || busyTrackerId !== null} onClick={() => void move(index, 1)}><ArrowDown size={16} /></button>
@@ -182,9 +175,9 @@ export function StackTrackerScreen() {
                 <div className="stack-value"><strong>{cumulativeLoading ? "…" : current}</strong><span>현재 스택</span></div>
                 {!cumulativeLoading && current < 0 ? <p className="stack-warning"><AlertTriangle size={14} /> 충전량보다 {Math.abs(current)}회 더 사용했습니다.</p> : null}
                 <dl className="stack-stats">
-                  <div><dt>{intervalMode ? "누적 충전" : "오늘 충전"}</dt><dd>{intervalMode ? `${charged}회` : `${charged} / ${tracker.totalCharges}`}</dd></div>
-                  <div><dt>{intervalMode ? "누적 사용" : "오늘 사용"}</dt><dd>{cumulativeLoading ? "확인 중" : consumed}</dd></div>
-                  <div><dt>다음 충전</dt><dd>{next ? `${intervalMode ? `${formatKstDateShort(next)} ` : ""}${formatKstTime(next)} · ${formatRemainingDuration(next, now)} 후` : "완료"}</dd></div>
+                  <div><dt>누적 충전</dt><dd>{`${charged}회`}</dd></div>
+                  <div><dt>누적 사용</dt><dd>{cumulativeLoading ? "확인 중" : consumed}</dd></div>
+                  <div><dt>다음 충전</dt><dd>{next ? `${intervalMode || nextIsAnotherDay ? `${formatKstDateShort(next)} ` : ""}${formatKstTime(next)} · ${formatRemainingDuration(next, now)} 후` : "완료"}</dd></div>
                 </dl>
                 <div className="stack-actions">
                   <button type="button" className="primary-button stack-consume" disabled={busyTrackerId === tracker.id} onClick={() => void consume(tracker)}><Minus size={18} /> 1 사용</button>

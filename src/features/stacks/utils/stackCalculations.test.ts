@@ -4,6 +4,8 @@ import {
   calculateChargeSchedule,
   calculateChargedCount,
   calculateCurrentStack,
+  calculateDailyCumulativeChargedCount,
+  calculateDailyCumulativeCurrentStack,
   formatChargeInterval,
   formatRemainingDuration,
   calculateIntervalChargedCount,
@@ -13,6 +15,7 @@ import {
   getKstPeriodDate,
   getKstPeriodRange,
   getNextChargeAt,
+  getNextDailyChargeAt,
   timeToMinute,
 } from "./stackCalculations";
 
@@ -51,12 +54,39 @@ describe("스택 시간 계산", () => {
     expect(calculateCurrentStack(allDay, "2026-07-13", 3, new Date("2026-07-12T16:00:00.000Z"))).toBe(-2);
   });
 
+  it("시간표 스택도 생성 이후 날짜가 바뀌어도 계속 누적한다", () => {
+    const tracker = {
+      ...allDay,
+      createdAt: new Date("2026-07-12T15:30:00.000Z"),
+    };
+    expect(calculateDailyCumulativeChargedCount(tracker, new Date("2026-07-12T16:00:00.000Z"))).toBe(1);
+    expect(calculateDailyCumulativeChargedCount(tracker, new Date("2026-07-13T15:00:00.000Z"))).toBe(24);
+    expect(calculateDailyCumulativeChargedCount(tracker, new Date("2026-07-13T16:00:00.000Z"))).toBe(25);
+    expect(calculateDailyCumulativeCurrentStack(tracker, 3, new Date("2026-07-13T16:00:00.000Z"))).toBe(22);
+  });
+
+  it("시간표 누적 계산은 월말과 윤년을 지나도 하루 충전을 유지한다", () => {
+    const tracker = {
+      startMinute: 0,
+      endMinute: 1440,
+      totalCharges: 1,
+      createdAt: new Date("2024-02-27T15:00:00.000Z"),
+    };
+    expect(calculateDailyCumulativeChargedCount(tracker, new Date("2024-02-29T15:00:00.000Z"))).toBe(2);
+  });
+
   it("다음 충전과 남은 시간을 반환하고 완료 뒤에는 null을 반환한다", () => {
     const now = new Date("2026-07-12T15:30:00.000Z");
     const next = getNextChargeAt(allDay, "2026-07-13", now);
     expect(next?.toISOString()).toBe("2026-07-12T16:00:00.000Z");
     expect(formatRemainingDuration(next, now)).toBe("30분");
     expect(getNextChargeAt(allDay, "2026-07-13", new Date("2026-07-13T15:00:00.000Z"))).toBeNull();
+  });
+
+  it("오늘 시간표가 끝나면 다음 날 첫 충전 시각을 반환한다", () => {
+    const tracker = { startMinute: 600, endMinute: 1200, totalCharges: 2 };
+    const now = new Date("2026-07-13T12:00:00.000Z");
+    expect(getNextDailyChargeAt(tracker, now).toISOString()).toBe("2026-07-14T06:00:00.000Z");
   });
 
   it("KST 자정에 periodDate를 바꾸고 월말·연말·윤년 범위를 처리한다", () => {

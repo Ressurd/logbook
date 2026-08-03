@@ -39,6 +39,15 @@ describe("누락 충전 이벤트 보정", () => {
     expect(planMissingChargeEvents([tracker({ isActive: false })], new Set(), new Date("2026-07-13T14:00:00.000Z"))).toEqual([]);
   });
 
+  it("트래커를 만든 시각보다 앞선 당일 충전 이벤트는 만들지 않는다", () => {
+    const planned = planMissingChargeEvents(
+      [tracker({ createdAt: new Date("2026-07-12T16:30:00.000Z") })],
+      new Set(),
+      new Date("2026-07-12T17:30:00.000Z"),
+    );
+    expect(planned.map((event) => event.id)).toEqual(["rest_charge_2026-07-13_2"]);
+  });
+
   it("과거 여러 날을 보정하지 않고 현재 KST 날짜 이벤트만 계획한다", () => {
     const planned = planMissingChargeEvents([tracker()], new Set(), new Date("2026-08-01T00:00:00.000Z"));
     expect(planned.every((event) => event.periodDate === "2026-08-01")).toBe(true);

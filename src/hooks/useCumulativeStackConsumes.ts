@@ -23,7 +23,6 @@ export function useCumulativeStackConsumes(
 ) {
   const trackerIdsKey = useMemo(
     () => trackers
-      .filter((tracker) => tracker.scheduleMode === "interval_days")
       .map((tracker) => tracker.id)
       .sort()
       .join(","),
